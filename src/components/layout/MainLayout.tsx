@@ -1,61 +1,55 @@
 'use client';
 
 import { ReactNode } from 'react';
-import Sidebar, { NavItem } from './Sidebar';
-import Header from './Header';
-import { Flame, TrendingUp, Settings, Bell, Search } from 'lucide-react';
+import Sidebar from './Sidebar';
+import ThemeToggle from '@/components/ui/ThemeToggle';
+import { BackgroundBeams } from '@/components/ui/Motion';
 
 interface MainLayoutProps {
   children: ReactNode;
-  title: string;
+  title?: string;
   subtitle?: string;
   actions?: ReactNode;
 }
 
 export default function MainLayout({ 
   children, 
-  title,
-  subtitle,
-  actions
+  title, 
+  subtitle, 
+  actions 
 }: MainLayoutProps) {
   return (
-    <div className="flex h-screen bg-background overflow-hidden">
-      <Sidebar>
-        <div className="space-y-2">
-          <NavItem 
-            icon={<Flame size={20} />} 
-            label="仪表盘" 
-            href="/dashboard"
-          />
-          <NavItem 
-            icon={<Search size={20} />} 
-            label="关键词管理" 
-            href="/keywords"
-          />
-          <NavItem 
-            icon={<TrendingUp size={20} />} 
-            label="热点列表" 
-            href="/hotspots"
-          />
-          <NavItem 
-            icon={<Bell size={20} />} 
-            label="通知记录" 
-            href="/notifications"
-          />
-          <NavItem 
-            icon={<Settings size={20} />} 
-            label="设置" 
-            href="/settings"
-          />
-        </div>
-      </Sidebar>
+    <div className="min-h-screen bg-background">
+      <div className="fixed inset-0 grid-bg pointer-events-none" />
+      <div className="fixed inset-0 radial-gradient pointer-events-none" />
+      <BackgroundBeams className="opacity-30" />
       
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <Header title={title} subtitle={subtitle} actions={actions} />
-        <main className="flex-1 overflow-auto p-6">
+      <Sidebar />
+      
+      <main className="ml-64 min-h-screen relative">
+        <div className="sticky top-0 z-30 bg-background/80 backdrop-blur-xl border-b border-border">
+          <div className="px-8 py-4">
+            <div className="flex items-center justify-between">
+              <div>
+                {title && (
+                  <h1 className="text-2xl font-bold text-foreground">{title}</h1>
+                )}
+                {subtitle && (
+                  <p className="text-foreground-muted mt-1">{subtitle}</p>
+                )}
+              </div>
+              <div className="flex items-center gap-4">
+                {actions}
+                <ThemeToggle />
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div className="p-8">
           {children}
-        </main>
-      </div>
+        </div>
+      </main>
     </div>
   );
 }

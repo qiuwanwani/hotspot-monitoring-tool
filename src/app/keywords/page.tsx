@@ -1,13 +1,22 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import MainLayout from '@/components/layout/MainLayout';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
-import Badge from '@/components/ui/Badge';
-import { SearchInput } from '@/components/ui/Input';
-import { Plus, Edit, Trash2, Power, PowerOff, X } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import Badge, { StatusBadge } from '@/components/ui/Badge';
+import { PulsingDot } from '@/components/ui/Motion';
 import { api, Keyword } from '@/lib/api';
+import { 
+  Search, 
+  Plus, 
+  Edit2, 
+  Trash2, 
+  Clock,
+  Filter,
+  X,
+  Sparkles
+} from 'lucide-react';
 
 export default function KeywordsPage() {
   const [keywords, setKeywords] = useState<Keyword[]>([]);
@@ -52,7 +61,24 @@ export default function KeywordsPage() {
     }
   };
 
-  const handleToggleActive = async (keyword: Keyword) => {
+  const handleUpdate = async () => {
+    if (!editingKeyword) return;
+    try {
+      await api.updateKeyword(editingKeyword.id, {
+        keyword: formData.keyword,
+        category: formData.category || undefined,
+        checkInterval: formData.checkInterval,
+      });
+      setShowModal(false);
+      setEditingKeyword(null);
+      setFormData({ keyword: '', category: '', checkInterval: 30 });
+      fetchKeywords();
+    } catch (error: any) {
+      alert(error.message);
+    }
+  };
+
+  const handleToggle = async (keyword: Keyword) => {
     try {
       await api.updateKeyword(keyword.id, { isActive: !keyword.isActive });
       fetchKeywords();
@@ -71,160 +97,234 @@ export default function KeywordsPage() {
     }
   };
 
-  const filteredKeywords = keywords.filter(kw =>
-    kw.keyword.toLowerCase().includes(searchQuery.toLowerCase())
+  const openEditModal = (keyword: Keyword) => {
+    setEditingKeyword(keyword);
+    setFormData({
+      keyword: keyword.keyword,
+      category: keyword.category || '',
+      checkInterval: keyword.checkInterval,
+    });
+    setShowModal(true);
+  };
+
+  const filteredKeywords = keywords.filter(k => 
+    k.keyword.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (k.category && k.category.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   return (
     <MainLayout 
       title="关键词管理"
-      subtitle="管理监控关键词"
+      subtitle="管理您的监控关键词"
       actions={
-        <Button icon={<Plus size={18} />} onClick={() => setShowModal(true)}>
+        <Button 
+          variant="primary"
+          icon={<Plus size={16} />}
+          onClick={() => {
+            setEditingKeyword(null);
+            setFormData({ keyword: '', category: '', checkInterval: 30 });
+            setShowModal(true);
+          }}
+        >
           添加关键词
         </Button>
       }
     >
-      <div className="space-y-6">
-        <Card>
-          <div className="flex items-center justify-between mb-4">
-            <SearchInput 
-              placeholder="搜索关键词..." 
-              value={searchQuery}
-              onChange={setSearchQuery}
-              className="w-64"
-            />
-            <div className="flex items-center gap-2">
-              <Badge variant="default">共 {keywords.length} 个</Badge>
-              <Badge variant="success">{keywords.filter(k => k.isActive).length} 启用</Badge>
+      {loading ? (
+        <div className="flex items-center justify-center h-64">
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-12 h-12 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+            <p className="text-foreground-muted">加载中...</p>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-6 animate-fade-in">
+          <div className="flex items-center gap-4">
+            <div className="flex-1 relative">
+              <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-foreground-subtle" />
+              <input
+                type="text"
+                placeholder="搜索关键词..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-11 pr-4 py-3 rounded-xl bg-card border border-border text-foreground placeholder:text-foreground-subtle focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all"
+              />
             </div>
+            <Button variant="outline" icon={<Filter size={16} />}>
+              筛选
+            </Button>
           </div>
 
-          {loading ? (
-            <div className="text-center py-8 text-foreground-muted">加载中...</div>
-          ) : keywords.length === 0 ? (
-            <div className="text-center py-8 text-foreground-muted">
-              暂无关键词，点击右上角添加
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-border">
-                    <th className="text-left py-3 px-4 text-foreground-muted font-medium">关键词</th>
-                    <th className="text-left py-3 px-4 text-foreground-muted font-medium">分类</th>
-                    <th className="text-left py-3 px-4 text-foreground-muted font-medium">状态</th>
-                    <th className="text-left py-3 px-4 text-foreground-muted font-medium">检查间隔</th>
-                    <th className="text-left py-3 px-4 text-foreground-muted font-medium">最后检查</th>
-                    <th className="text-right py-3 px-4 text-foreground-muted font-medium">操作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredKeywords.map((kw) => (
-                    <tr key={kw.id} className="border-b border-border hover:bg-card transition-colors">
-                      <td className="py-3 px-4">
-                        <span className="font-medium text-foreground">{kw.keyword}</span>
-                      </td>
-                      <td className="py-3 px-4">
-                        {kw.category ? (
-                          <Badge variant="info">{kw.category}</Badge>
-                        ) : (
-                          <span className="text-foreground-subtle">-</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4">
-                        {kw.isActive ? (
-                          <Badge variant="success">启用</Badge>
-                        ) : (
-                          <Badge variant="default">禁用</Badge>
-                        )}
-                      </td>
-                      <td className="py-3 px-4 text-foreground-muted text-sm">
-                        {kw.checkInterval} 分钟
-                      </td>
-                      <td className="py-3 px-4 text-foreground-muted text-sm">
-                        {kw.lastCheckedAt 
-                          ? new Date(kw.lastCheckedAt).toLocaleString('zh-CN')
-                          : '未检查'}
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="flex items-center justify-end gap-2">
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            icon={kw.isActive ? <PowerOff size={16} /> : <Power size={16} />}
-                            onClick={() => handleToggleActive(kw)}
-                          >
-                            {kw.isActive ? '禁用' : '启用'}
-                          </Button>
-                          <Button variant="ghost" size="sm" icon={<Edit size={16} />}>
-                            编辑
-                          </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            icon={<Trash2 size={16} />}
-                            onClick={() => handleDelete(kw.id)}
-                          >
-                            删除
-                          </Button>
+          <div className="grid gap-4">
+            {filteredKeywords.length === 0 ? (
+              <Card className="p-12 text-center">
+                <div className="w-16 h-16 rounded-full bg-card-hover mx-auto mb-4 flex items-center justify-center">
+                  <Search size={24} className="text-foreground-subtle" />
+                </div>
+                <h3 className="text-lg font-semibold text-foreground mb-2">暂无关键词</h3>
+                <p className="text-foreground-muted mb-6">
+                  {searchQuery ? '尝试其他搜索词' : '添加第一个关键词开始监控'}
+                </p>
+                {!searchQuery && (
+                  <Button 
+                    variant="primary"
+                    icon={<Sparkles size={16} />}
+                    onClick={() => setShowModal(true)}
+                  >
+                    添加第一个关键词
+                  </Button>
+                )}
+              </Card>
+            ) : (
+              filteredKeywords.map((keyword, index) => (
+                <Card 
+                  key={keyword.id} 
+                  hover 
+                  className="p-5 animate-slide-up"
+                  style={{ animationDelay: `${index * 50}ms` }}
+                >
+                  <div className="flex items-center gap-6">
+                    <div className="flex items-center gap-4 flex-1 min-w-0">
+                      <div className={`p-3 rounded-xl ${keyword.isActive ? 'bg-primary/10' : 'bg-background-tertiary'}`}>
+                        <PulsingDot className={keyword.isActive ? '' : 'opacity-0'} />
+                      </div>
+                      
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-3 mb-1">
+                          <h3 className="font-semibold text-foreground truncate">{keyword.keyword}</h3>
+                          <StatusBadge status={keyword.isActive ? 'active' : 'inactive'} />
                         </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Card>
-      </div>
+                        <div className="flex items-center gap-4 text-sm text-foreground-muted">
+                          {keyword.category && (
+                            <Badge variant="secondary">{keyword.category}</Badge>
+                          )}
+                          <div className="flex items-center gap-1">
+                            <Clock size={14} />
+                            <span>每 {keyword.checkInterval} 分钟</span>
+                          </div>
+                          <span>热点数: {keyword._count?.hotspots || 0}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleToggle(keyword)}
+                      >
+                        {keyword.isActive ? '暂停' : '启用'}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => openEditModal(keyword)}
+                        icon={<Edit2 size={14} />}
+                      />
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDelete(keyword.id)}
+                        className="text-accent-red hover:text-accent-red"
+                        icon={<Trash2 size={14} />}
+                      />
+                    </div>
+                  </div>
+                </Card>
+              ))
+            )}
+          </div>
+        </div>
+      )}
 
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-card border border-border rounded-lg p-6 w-full max-w-md">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-foreground">添加关键词</h3>
-              <button onClick={() => setShowModal(false)} className="text-foreground-muted hover:text-foreground">
-                <X size={20} />
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div 
+            className="absolute inset-0 bg-background/80 backdrop-blur-sm"
+            onClick={() => {
+              setShowModal(false);
+              setEditingKeyword(null);
+            }}
+          />
+          <Card className="relative w-full max-w-md p-6 animate-scale-in">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-foreground">
+                {editingKeyword ? '编辑关键词' : '添加关键词'}
+              </h2>
+              <button
+                onClick={() => {
+                  setShowModal(false);
+                  setEditingKeyword(null);
+                }}
+                className="p-2 rounded-lg hover:bg-card transition-colors"
+              >
+                <X size={18} className="text-foreground-muted" />
               </button>
             </div>
+
             <div className="space-y-4">
               <div>
-                <label className="block text-foreground-muted text-sm mb-2">关键词 *</label>
+                <label className="block text-sm font-medium text-foreground-muted mb-2">
+                  关键词
+                </label>
                 <input
                   type="text"
                   value={formData.keyword}
                   onChange={(e) => setFormData({ ...formData, keyword: e.target.value })}
-                  className="w-full h-11 bg-background border border-border rounded-lg px-4 text-foreground focus:outline-none focus:border-primary"
-                  placeholder="输入关键词"
+                  placeholder="例如：AI、比特币、科技新闻"
+                  className="w-full px-4 py-3 rounded-xl bg-background-tertiary border border-border text-foreground placeholder:text-foreground-subtle focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all"
                 />
               </div>
+
               <div>
-                <label className="block text-foreground-muted text-sm mb-2">分类</label>
+                <label className="block text-sm font-medium text-foreground-muted mb-2">
+                  分类（可选）
+                </label>
                 <input
                   type="text"
                   value={formData.category}
                   onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                  className="w-full h-11 bg-background border border-border rounded-lg px-4 text-foreground focus:outline-none focus:border-primary"
-                  placeholder="例如: AI、科技、汽车"
+                  placeholder="例如：科技、金融"
+                  className="w-full px-4 py-3 rounded-xl bg-background-tertiary border border-border text-foreground placeholder:text-foreground-subtle focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all"
                 />
               </div>
+
               <div>
-                <label className="block text-foreground-muted text-sm mb-2">检查间隔 (分钟)</label>
+                <label className="block text-sm font-medium text-foreground-muted mb-2">
+                  检查间隔（分钟）
+                </label>
                 <input
                   type="number"
                   value={formData.checkInterval}
                   onChange={(e) => setFormData({ ...formData, checkInterval: parseInt(e.target.value) || 30 })}
-                  className="w-full h-11 bg-background border border-border rounded-lg px-4 text-foreground focus:outline-none focus:border-primary"
-                  min="1"
+                  min={5}
+                  max={1440}
+                  className="w-full px-4 py-3 rounded-xl bg-background-tertiary border border-border text-foreground placeholder:text-foreground-subtle focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all"
                 />
               </div>
             </div>
-            <div className="flex justify-end gap-3 mt-6">
-              <Button variant="outline" onClick={() => setShowModal(false)}>取消</Button>
-              <Button onClick={handleCreate} disabled={!formData.keyword}>添加</Button>
+
+            <div className="flex gap-3 mt-6">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => {
+                  setShowModal(false);
+                  setEditingKeyword(null);
+                }}
+              >
+                取消
+              </Button>
+              <Button
+                variant="primary"
+                className="flex-1"
+                onClick={editingKeyword ? handleUpdate : handleCreate}
+                disabled={!formData.keyword.trim()}
+              >
+                {editingKeyword ? '保存' : '添加'}
+              </Button>
             </div>
-          </div>
+          </Card>
         </div>
       )}
     </MainLayout>

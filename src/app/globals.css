@@ -3,15 +3,301 @@
 @tailwind utilities;
 
 @layer base {
+  :root,
+  html {
+    --background: #ffffff;
+    --background-rgb: 255 255 255;
+    --background-secondary: #fafafa;
+    --background-secondary-rgb: 250 250 250;
+    --background-tertiary: #f5f5f5;
+    --background-tertiary-rgb: 245 245 245;
+    --foreground: #171717;
+    --foreground-rgb: 23 23 23;
+    --foreground-muted: #737373;
+    --foreground-muted-rgb: 115 115 115;
+    --foreground-subtle: #a3a3a3;
+    --foreground-subtle-rgb: 163 163 163;
+    --primary: #0066ff;
+    --primary-rgb: 0 102 255;
+    --primary-hover: #0052cc;
+    --primary-hover-rgb: 0 82 204;
+    --primary-glow: rgba(0, 102, 255, 0.1);
+    --secondary: #7c3aed;
+    --secondary-rgb: 124 58 237;
+    --secondary-glow: rgba(124, 58, 237, 0.1);
+    --accent-orange: #f97316;
+    --accent-orange-rgb: 249 115 22;
+    --accent-green: #10b981;
+    --accent-green-rgb: 16 185 129;
+    --accent-red: #ef4444;
+    --accent-red-rgb: 239 68 68;
+    --accent-yellow: #f59e0b;
+    --accent-yellow-rgb: 245 158 11;
+    --card: #ffffff;
+    --card-rgb: 255 255 255;
+    --card-hover: #fafafa;
+    --card-hover-rgb: 250 250 250;
+    --border: #e5e5e5;
+    --border-rgb: 229 229 229;
+    --border-light: #d4d4d4;
+    --border-light-rgb: 212 212 212;
+    --grid-color: rgba(0, 102, 255, 0.02);
+    --shadow-color: rgba(0, 0, 0, 0.05);
+    --shadow-color-hover: rgba(0, 0, 0, 0.08);
+    --glass-bg: rgba(255, 255, 255, 0.8);
+    --glass-border: rgba(229, 229, 229, 0.6);
+    --glow-start: rgba(0, 102, 255, 0.06);
+    --glow-mid: rgba(124, 58, 237, 0.06);
+    --glow-end: rgba(16, 185, 129, 0.06);
+    --selection-bg: rgba(0, 102, 255, 0.15);
+  }
+
+  html.dark,
+  .dark {
+    --background: #000000;
+    --background-rgb: 0 0 0;
+    --background-secondary: #0a0a0a;
+    --background-secondary-rgb: 10 10 10;
+    --background-tertiary: #141414;
+    --background-tertiary-rgb: 20 20 20;
+    --foreground: #fafafa;
+    --foreground-rgb: 250 250 250;
+    --foreground-muted: #a1a1aa;
+    --foreground-muted-rgb: 161 161 170;
+    --foreground-subtle: #71717a;
+    --foreground-subtle-rgb: 113 113 122;
+    --primary: #3b82f6;
+    --primary-rgb: 59 130 246;
+    --primary-hover: #60a5fa;
+    --primary-hover-rgb: 96 165 250;
+    --primary-glow: rgba(59, 130, 246, 0.12);
+    --secondary: #8b5cf6;
+    --secondary-rgb: 139 92 246;
+    --secondary-glow: rgba(139, 92, 246, 0.12);
+    --accent-orange: #fb923c;
+    --accent-orange-rgb: 251 146 60;
+    --accent-green: #34d399;
+    --accent-green-rgb: 52 211 153;
+    --accent-red: #f87171;
+    --accent-red-rgb: 248 113 113;
+    --accent-yellow: #fbbf24;
+    --accent-yellow-rgb: 251 191 36;
+    --card: #0a0a0a;
+    --card-rgb: 10 10 10;
+    --card-hover: #141414;
+    --card-hover-rgb: 20 20 20;
+    --border: #262626;
+    --border-rgb: 38 38 38;
+    --border-light: #404040;
+    --border-light-rgb: 64 64 64;
+    --grid-color: rgba(59, 130, 246, 0.02);
+    --shadow-color: rgba(0, 0, 0, 0.5);
+    --shadow-color-hover: rgba(0, 0, 0, 0.6);
+    --glass-bg: rgba(10, 10, 10, 0.9);
+    --glass-border: rgba(38, 38, 38, 0.8);
+    --glow-start: rgba(59, 130, 246, 0.06);
+    --glow-mid: rgba(139, 92, 246, 0.06);
+    --glow-end: rgba(52, 211, 153, 0.06);
+    --selection-bg: rgba(59, 130, 246, 0.25);
+  }
+
+  * {
+    border-color: var(--border);
+  }
+  
   body {
-    @apply bg-background text-foreground;
+    background-color: var(--background);
+    color: var(--foreground);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  ::selection {
+    background-color: var(--selection-bg);
+    color: var(--foreground);
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background-color: var(--background-secondary);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--border-light);
+    border-radius: 9999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--foreground-subtle);
+  }
+}
+
+@layer components {
+  .glass {
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+  }
+
+  .glass-card {
+    background: linear-gradient(
+      135deg,
+      var(--glass-bg) 0%,
+      var(--background-tertiary) 100%
+    );
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    box-shadow: 
+      0 4px 24px var(--shadow-color),
+      inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  }
+
+  .glow-border {
+    position: relative;
+  }
+
+  .glow-border::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(
+      135deg,
+      var(--glow-start) 0%,
+      var(--glow-mid) 50%,
+      var(--glow-end) 100%
+    );
+    -webkit-mask: 
+      linear-gradient(#fff 0 0) content-box, 
+      linear-gradient(#fff 0 0);
+    mask: 
+      linear-gradient(#fff 0 0) content-box, 
+      linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  .gradient-text {
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+    background-image: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 50%, var(--accent-green) 100%);
+  }
+
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.04) 50%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 2s linear infinite;
+  }
+
+  .hover-lift {
+    transition: all 0.3s ease;
+  }
+
+  .hover-lift:hover {
+    transform: translateY(-4px);
+    box-shadow: 
+      0 8px 32px var(--shadow-color-hover),
+      0 0 20px var(--primary-glow);
+  }
+
+  .pulse-dot {
+    position: relative;
+  }
+
+  .pulse-dot::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 9999px;
+    animation: pulse-ring 1.5s ease-out infinite;
+  }
+
+  @keyframes pulse-ring {
+    0% {
+      transform: scale(1);
+      opacity: 0.8;
+      box-shadow: 0 0 0 0 currentColor;
+    }
+    100% {
+      transform: scale(1.5);
+      opacity: 0;
+      box-shadow: 0 0 0 10px transparent;
+    }
+  }
+
+  .grid-bg {
+    background-image: 
+      linear-gradient(var(--grid-color) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  .radial-gradient {
+    background: radial-gradient(
+      ellipse 80% 50% at 50% -20%,
+      var(--glow-start) 0%,
+      transparent 50%
+    );
+  }
+
+  .stat-card-glow {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hotspot-item {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hotspot-item::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background-color: var(--primary);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  .hotspot-item:hover::before {
+    opacity: 1;
   }
 }
 
 @layer utilities {
-  .glass {
-    background: rgba(22, 22, 31, 0.7);
-    backdrop-filter: blur(12px);
-    border: 1px solid rgba(39, 39, 42, 0.5);
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .animation-delay-100 {
+    animation-delay: 100ms;
+  }
+
+  .animation-delay-200 {
+    animation-delay: 200ms;
+  }
+
+  .animation-delay-300 {
+    animation-delay: 300ms;
+  }
+
+  .animation-delay-500 {
+    animation-delay: 500ms;
   }
 }

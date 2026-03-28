@@ -1,19 +1,29 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import MainLayout from '@/components/layout/MainLayout';
 import Card from '@/components/ui/Card';
-import Badge, { HeatBadge } from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
-import { SearchInput } from '@/components/ui/Input';
-import { ExternalLink, Clock, Filter, ChevronLeft, ChevronRight } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import Badge from '@/components/ui/Badge';
 import { api, Hotspot, PaginatedResponse } from '@/lib/api';
+import { 
+  Search, 
+  TrendingUp,
+  Flame,
+  ExternalLink,
+  Filter,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  Globe
+} from 'lucide-react';
 
 export default function HotspotsPage() {
   const [data, setData] = useState<PaginatedResponse<Hotspot> | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [page, setPage] = useState(1);
+  const [selectedSource, setSelectedSource] = useState<string>('all');
 
   useEffect(() => {
     fetchHotspots();
@@ -31,125 +41,223 @@ export default function HotspotsPage() {
     }
   };
 
-  const filteredHotspots = data?.data.filter(h =>
-    h.title.toLowerCase().includes(searchQuery.toLowerCase())
-  ) || [];
+  const formatTime = (dateString: string | null) => {
+    if (!dateString) return '未知';
+    const date = new Date(dateString);
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    const days = Math.floor(diff / 86400000);
+    
+    if (minutes < 60) return `${minutes}分钟前`;
+    if (hours < 24) return `${hours}小时前`;
+    if (days < 7) return `${days}天前`;
+    return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+  };
+
+  const getHeatConfig = (score: number) => {
+    if (score >= 80) return { 
+      label: '火爆', 
+      color: 'text-accent-red',
+      bg: 'bg-accent-red/10',
+      border: 'border-accent-red/20'
+    };
+    if (score >= 60) return { 
+      label: '热门', 
+      color: 'text-accent-orange',
+      bg: 'bg-accent-orange/10',
+      border: 'border-accent-orange/20'
+    };
+    if (score >= 40) return { 
+      label: '上升', 
+      color: 'text-accent-yellow',
+      bg: 'bg-accent-yellow/10',
+      border: 'border-accent-yellow/20'
+    };
+    return { 
+      label: '新发现', 
+      color: 'text-accent-green',
+      bg: 'bg-accent-green/10',
+      border: 'border-accent-green/20'
+    };
+  };
+
+  const sources = ['all', ...new Set(data?.data.map(h => h.source) || [])];
+  
+  const filteredHotspots = data?.data.filter(hotspot => {
+    const matchesSearch = hotspot.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (hotspot.summary && hotspot.summary.toLowerCase().includes(searchQuery.toLowerCase()));
+    const matchesSource = selectedSource === 'all' || hotspot.source === selectedSource;
+    return matchesSearch && matchesSource;
+  }) || [];
 
   return (
     <MainLayout 
       title="热点列表"
-      subtitle="查看所有监控到的热点信息"
+      subtitle="发现各平台热门内容"
       actions={
-        <Button variant="outline" icon={<Filter size={18} />}>
-          筛选
-        </Button>
+        <div className="flex items-center gap-3">
+          <select
+            value={selectedSource}
+            onChange={(e) => setSelectedSource(e.target.value)}
+            className="px-4 py-2 rounded-lg bg-card border border-border text-foreground focus:outline-none focus:border-primary/50"
+          >
+            {sources.map(source => (
+              <option key={source} value={source}>
+                {source === 'all' ? '所有来源' : source}
+              </option>
+            ))}
+          </select>
+          <Button variant="outline" icon={<Filter size={16} />}>
+            筛选
+          </Button>
+        </div>
       }
     >
-      <div className="space-y-6">
-        <Card>
-          <div className="flex items-center justify-between mb-4">
-            <SearchInput 
-              placeholder="搜索热点..." 
+      {loading ? (
+        <div className="flex items-center justify-center h-64">
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-12 h-12 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+            <p className="text-foreground-muted">加载热点中...</p>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-6 animate-fade-in">
+          <div className="relative">
+            <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-foreground-subtle" />
+            <input
+              type="text"
+              placeholder="搜索热点..."
               value={searchQuery}
-              onChange={setSearchQuery}
-              className="w-64"
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-11 pr-4 py-3 rounded-xl bg-card border border-border text-foreground placeholder:text-foreground-subtle focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all"
             />
-            <div className="flex items-center gap-2">
-              <Badge variant="default">共 {data?.pagination.total || 0} 条</Badge>
-            </div>
           </div>
 
-          {loading ? (
-            <div className="text-center py-8 text-foreground-muted">加载中...</div>
-          ) : filteredHotspots.length === 0 ? (
-            <div className="text-center py-8 text-foreground-muted">
-              暂无热点数据
-            </div>
+          {filteredHotspots.length === 0 ? (
+            <Card className="p-12 text-center">
+              <div className="w-16 h-16 rounded-full bg-card-hover mx-auto mb-4 flex items-center justify-center">
+                <TrendingUp size={24} className="text-foreground-subtle" />
+              </div>
+              <h3 className="text-lg font-semibold text-foreground mb-2">暂无热点</h3>
+              <p className="text-foreground-muted">
+                {searchQuery ? '尝试其他搜索词' : '发现热点后将在此显示'}
+              </p>
+            </Card>
           ) : (
-            <div className="space-y-3">
-              {filteredHotspots.map((hotspot) => (
-                <div 
-                  key={hotspot.id}
-                  className="p-4 bg-background-secondary rounded-lg border border-border hover:border-border-light transition-all"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        {hotspot.category && (
-                          <Badge variant="info">{hotspot.category}</Badge>
-                        )}
-                        <Badge variant="default">{hotspot.source}</Badge>
-                        {hotspot.isVerified && (
-                          <Badge variant="success">已验证</Badge>
-                        )}
-                        {hotspot.isFake && (
-                          <Badge variant="danger">虚假信息</Badge>
-                        )}
-                      </div>
-                      <h4 className="text-foreground font-medium mb-2">
-                        {hotspot.title}
-                      </h4>
-                      {hotspot.summary && (
-                        <p className="text-foreground-muted text-sm mb-2">
-                          {hotspot.summary}
-                        </p>
-                      )}
-                      <div className="flex items-center gap-4 text-sm text-foreground-muted">
-                        <span className="flex items-center gap-1">
-                          <Clock size={14} />
-                          {new Date(hotspot.createdAt).toLocaleString('zh-CN')}
+            <div className="grid gap-4">
+              {filteredHotspots.map((hotspot, index) => {
+                const heatConfig = getHeatConfig(hotspot.heatScore);
+                
+                return (
+                  <Card 
+                    key={hotspot.id} 
+                    hover
+                    className="p-5 animate-slide-up hotspot-item"
+                    style={{ animationDelay: `${index * 50}ms` }}
+                  >
+                    <div className="flex gap-5">
+                      <div className={`flex-shrink-0 w-16 h-16 rounded-xl ${heatConfig.bg} ${heatConfig.border} border flex flex-col items-center justify-center`}>
+                        <span className={`text-2xl font-bold ${heatConfig.color}`}>
+                          {hotspot.heatScore}
                         </span>
-                        {hotspot.keywordsMatched && (
-                          <span>匹配关键词: {hotspot.keywordsMatched}</span>
+                        <span className={`text-xs ${heatConfig.color} opacity-80`}>
+                          {heatConfig.label}
+                        </span>
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-4 mb-2">
+                          <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors line-clamp-2">
+                            {hotspot.title}
+                          </h3>
+                          {hotspot.url && (
+                            <a
+                              href={hotspot.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex-shrink-0 p-2 rounded-lg hover:bg-card transition-colors"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <ExternalLink size={16} className="text-foreground-muted hover:text-primary" />
+                            </a>
+                          )}
+                        </div>
+
+                        {hotspot.summary && (
+                          <p className="text-sm text-foreground-muted mb-3 line-clamp-2">
+                            {hotspot.summary}
+                          </p>
                         )}
+
+                        <div className="flex items-center gap-4 flex-wrap">
+                          <div className="flex items-center gap-2">
+                            <Globe size={14} className="text-foreground-subtle" />
+                            <Badge variant="default">{hotspot.source}</Badge>
+                          </div>
+                          
+                          {hotspot.keyword && (
+                            <Badge variant="secondary">{hotspot.keyword.keyword}</Badge>
+                          )}
+                          
+                          <div className="flex items-center gap-1 text-xs text-foreground-subtle">
+                            <Clock size={12} />
+                            <span>{formatTime(hotspot.publishedAt)}</span>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3 ml-4">
-                      <HeatBadge score={hotspot.heatScore} />
-                      {hotspot.sourceUrl && (
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          icon={<ExternalLink size={16} />}
-                          onClick={() => window.open(hotspot.sourceUrl!, '_blank')}
-                        >
-                          查看
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
+                  </Card>
+                );
+              })}
             </div>
           )}
 
           {data && data.pagination.totalPages > 1 && (
-            <div className="flex items-center justify-center gap-2 mt-6">
+            <div className="flex items-center justify-center gap-4 pt-6">
               <Button
                 variant="outline"
                 size="sm"
-                icon={<ChevronLeft size={16} />}
-                onClick={() => setPage(p => Math.max(1, p - 1))}
                 disabled={page === 1}
+                onClick={() => setPage(p => p - 1)}
+                icon={<ChevronLeft size={16} />}
               >
                 上一页
               </Button>
-              <span className="text-foreground-muted text-sm">
-                第 {page} / {data.pagination.totalPages} 页
-              </span>
+              
+              <div className="flex items-center gap-2">
+                {Array.from({ length: Math.min(5, data.pagination.totalPages) }, (_, i) => {
+                  const pageNum = i + 1;
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => setPage(pageNum)}
+                      className={`w-8 h-8 rounded-lg text-sm font-medium transition-all ${
+                        page === pageNum
+                          ? 'bg-primary text-white'
+                          : 'bg-card text-foreground-muted hover:bg-card-hover'
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+              </div>
+
               <Button
                 variant="outline"
                 size="sm"
-                icon={<ChevronRight size={16} />}
-                onClick={() => setPage(p => Math.min(data.pagination.totalPages, p + 1))}
                 disabled={page === data.pagination.totalPages}
+                onClick={() => setPage(p => p + 1)}
               >
                 下一页
+                <ChevronRight size={16} />
               </Button>
             </div>
           )}
-        </Card>
-      </div>
+        </div>
+      )}
     </MainLayout>
   );
 }

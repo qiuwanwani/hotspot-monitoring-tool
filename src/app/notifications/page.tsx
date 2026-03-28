@@ -1,107 +1,211 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import MainLayout from '@/components/layout/MainLayout';
 import Card from '@/components/ui/Card';
-import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
-import { Clock, CheckCircle, XCircle, ExternalLink } from 'lucide-react';
-
-const mockNotifications = [
-  {
-    id: '1',
-    type: 'email',
-    status: 'sent',
-    keyword: 'OpenAI',
-    hotspotTitle: 'OpenAI 发布 GPT-5 预览版',
-    createdAt: new Date(),
-    sentAt: new Date(),
-  },
-  {
-    id: '2',
-    type: 'push',
-    status: 'sent',
-    keyword: '苹果',
-    hotspotTitle: '苹果 Vision Pro 2 即将发布',
-    createdAt: new Date(),
-    sentAt: new Date(),
-  },
-  {
-    id: '3',
-    type: 'email',
-    status: 'failed',
-    keyword: '特斯拉',
-    hotspotTitle: '特斯拉新款 Model 3 上市',
-    createdAt: new Date(),
-    error: 'SMTP 连接超时',
-  },
-  {
-    id: '4',
-    type: 'push',
-    status: 'pending',
-    keyword: 'GPT-5',
-    hotspotTitle: 'Meta 宣布开源 Llama 4 模型',
-    createdAt: new Date(),
-  },
-];
+import { api, Notification } from '@/lib/api';
+import { 
+  Bell, 
+  BellOff,
+  Check,
+  Clock,
+  ExternalLink,
+  Filter
+} from 'lucide-react';
 
 export default function NotificationsPage() {
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<'all' | 'unread' | 'read'>('all');
+
+  useEffect(() => {
+    fetchNotifications();
+  }, []);
+
+  const fetchNotifications = async () => {
+    try {
+      setLoading(true);
+      const data = await api.getNotifications();
+      setNotifications(data);
+    } catch (error) {
+      console.error('获取通知失败:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMarkAsRead = async (id: string) => {
+    try {
+      await api.markNotificationRead(id);
+      fetchNotifications();
+    } catch (error) {
+      console.error('标记失败:', error);
+    }
+  };
+
+  const handleMarkAllRead = async () => {
+    try {
+      await api.markAllNotificationsRead();
+      fetchNotifications();
+    } catch (error) {
+      console.error('标记失败:', error);
+    }
+  };
+
+  const formatTime = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    const days = Math.floor(diff / 86400000);
+    
+    if (minutes < 60) return `${minutes}分钟前`;
+    if (hours < 24) return `${hours}小时前`;
+    if (days < 7) return `${days}天前`;
+    return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+  };
+
+  const filteredNotifications = notifications.filter(n => {
+    if (filter === 'unread') return !n.isRead;
+    if (filter === 'read') return n.isRead;
+    return true;
+  });
+
+  const unreadCount = notifications.filter(n => !n.isRead).length;
+
   return (
     <MainLayout 
-      title="通知记录"
-      subtitle="查看所有发送的通知"
+      title="通知中心"
+      subtitle={`${unreadCount} 条未读通知`}
+      actions={
+        <div className="flex items-center gap-3">
+          {unreadCount > 0 && (
+            <Button variant="outline" onClick={handleMarkAllRead}>
+              全部标为已读
+            </Button>
+          )}
+          <Button variant="outline" icon={<Filter size={16} />}>
+            筛选
+          </Button>
+        </div>
+      }
     >
-      <div className="space-y-6">
-        <Card>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-foreground">通知历史</h3>
-            <div className="flex items-center gap-2">
-              <Badge variant="success">已发送 {mockNotifications.filter(n => n.status === 'sent').length}</Badge>
-              <Badge variant="warning">待发送 {mockNotifications.filter(n => n.status === 'pending').length}</Badge>
-              <Badge variant="danger">失败 {mockNotifications.filter(n => n.status === 'failed').length}</Badge>
-            </div>
+      {loading ? (
+        <div className="flex items-center justify-center h-64">
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-12 h-12 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+            <p className="text-foreground-muted">加载通知中...</p>
           </div>
-
-          <div className="space-y-3">
-            {mockNotifications.map((notification) => (
-              <div 
-                key={notification.id}
-                className="p-4 bg-background-secondary rounded-lg border border-border flex items-center justify-between"
+        </div>
+      ) : (
+        <div className="space-y-6 animate-fade-in">
+          <div className="flex items-center gap-2">
+            {(['all', 'unread', 'read'] as const).map((f) => (
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  filter === f
+                    ? 'bg-primary text-white'
+                    : 'bg-card text-foreground-muted hover:bg-card-hover'
+                }`}
               >
-                <div className="flex items-center gap-4">
-                  <div className={`p-2 rounded-lg ${
-                    notification.status === 'sent' ? 'bg-accent-green/10 text-accent-green' :
-                    notification.status === 'failed' ? 'bg-accent-red/10 text-accent-red' :
-                    'bg-accent-orange/10 text-accent-orange'
-                  }`}>
-                    {notification.status === 'sent' ? <CheckCircle size={20} /> :
-                     notification.status === 'failed' ? <XCircle size={20} /> :
-                     <Clock size={20} />}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <Badge variant={notification.type === 'email' ? 'primary' : 'info'}>
-                        {notification.type === 'email' ? '邮件' : '推送'}
-                      </Badge>
-                      <span className="text-foreground-muted text-sm">
-                        关键词: <span className="text-primary">{notification.keyword}</span>
-                      </span>
-                    </div>
-                    <p className="text-foreground font-medium">{notification.hotspotTitle}</p>
-                    <p className="text-foreground-muted text-sm mt-1">
-                      {notification.status === 'sent' ? `发送于 ${notification.sentAt?.toLocaleString()}` :
-                       notification.status === 'failed' ? `失败原因: ${notification.error}` :
-                       '等待发送...'}
-                    </p>
-                  </div>
-                </div>
-                <Button variant="ghost" size="sm" icon={<ExternalLink size={16} />}>
-                  查看热点
-                </Button>
-              </div>
+                {f === 'all' ? '全部' : f === 'unread' ? '未读' : '已读'}
+                {f === 'unread' && unreadCount > 0 && (
+                  <span className="ml-2 px-1.5 py-0.5 rounded-full bg-background/20 text-xs">
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
             ))}
           </div>
-        </Card>
-      </div>
+
+          {filteredNotifications.length === 0 ? (
+            <Card className="p-12 text-center">
+              <div className="w-16 h-16 rounded-full bg-card-hover mx-auto mb-4 flex items-center justify-center">
+                <Bell size={24} className="text-foreground-subtle" />
+              </div>
+              <h3 className="text-lg font-semibold text-foreground mb-2">
+                {filter === 'all' ? '暂无通知' : `暂无${filter === 'unread' ? '未读' : '已读'}通知`}
+              </h3>
+              <p className="text-foreground-muted">
+                {filter === 'all' 
+                  ? '发现热点时您将收到通知' 
+                  : `您没有${filter === 'unread' ? '未读' : '已读'}通知`
+                }
+              </p>
+            </Card>
+          ) : (
+            <div className="grid gap-3">
+              {filteredNotifications.map((notification, index) => (
+                <Card 
+                  key={notification.id}
+                  hover
+                  className={`p-4 animate-slide-up ${!notification.isRead ? 'border-primary/30' : ''}`}
+                  style={{ animationDelay: `${index * 30}ms` }}
+                >
+                  <div className="flex items-start gap-4">
+                    <div className={`p-2 rounded-lg ${notification.isRead ? 'bg-background-tertiary' : 'bg-primary/10'}`}>
+                      {notification.isRead ? (
+                        <BellOff size={18} className="text-foreground-muted" />
+                      ) : (
+                        <Bell size={18} className="text-primary" />
+                      )}
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-4 mb-1">
+                        <h4 className={`font-medium ${notification.isRead ? 'text-foreground-muted' : 'text-foreground'}`}>
+                          {notification.title}
+                        </h4>
+                        {!notification.isRead && (
+                          <div className="w-2 h-2 rounded-full bg-primary flex-shrink-0 mt-2" />
+                        )}
+                      </div>
+                      
+                      {notification.message && (
+                        <p className="text-sm text-foreground-muted mb-2 line-clamp-2">
+                          {notification.message}
+                        </p>
+                      )}
+
+                      <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-1 text-xs text-foreground-subtle">
+                          <Clock size={12} />
+                          <span>{formatTime(notification.createdAt)}</span>
+                        </div>
+                        
+                        {notification.hotspot && (
+                          <a
+                            href={notification.hotspot.url || '#'}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1 text-xs text-primary hover:underline"
+                          >
+                            查看热点
+                            <ExternalLink size={10} />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+
+                    {!notification.isRead && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleMarkAsRead(notification.id)}
+                        icon={<Check size={14} />}
+                      />
+                    )}
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </MainLayout>
   );
 }

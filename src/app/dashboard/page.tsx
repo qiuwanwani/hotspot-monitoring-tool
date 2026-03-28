@@ -1,13 +1,21 @@
 'use client';
 
-import MainLayout from '@/components/layout/MainLayout';
-import Card, { StatCard } from '@/components/ui/Card';
-import Badge, { HeatBadge } from '@/components/ui/Badge';
-import Button from '@/components/ui/Button';
-import { SearchInput } from '@/components/ui/Input';
-import { Flame, TrendingUp, Bell, Eye, ExternalLink, Clock } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import MainLayout from '@/components/layout/MainLayout';
+import Card, { StatCard, HotspotCard } from '@/components/ui/Card';
+import Button from '@/components/ui/Button';
+import Badge from '@/components/ui/Badge';
+import { PulsingDot, AnimatedGradientText } from '@/components/ui/Motion';
 import { api, Keyword, Hotspot } from '@/lib/api';
+import { 
+  TrendingUp, 
+  Search, 
+  Bell, 
+  Flame,
+  ArrowRight,
+  Clock,
+  Sparkles
+} from 'lucide-react';
 
 export default function DashboardPage() {
   const [keywords, setKeywords] = useState<Keyword[]>([]);
@@ -35,150 +43,195 @@ export default function DashboardPage() {
   };
 
   const activeKeywords = keywords.filter(k => k.isActive).length;
-  const todayHotspots = hotspots.filter(h => {
-    const today = new Date();
-    const created = new Date(h.createdAt);
-    return created.toDateString() === today.toDateString();
-  }).length;
+  const totalHotspots = hotspots.length;
+
+  const formatTime = (dateString: string | null) => {
+    if (!dateString) return '从未';
+    const date = new Date(dateString);
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    const days = Math.floor(diff / 86400000);
+    
+    if (minutes < 60) return `${minutes}分钟前`;
+    if (hours < 24) return `${hours}小时前`;
+    return `${days}天前`;
+  };
 
   return (
     <MainLayout 
       title="仪表盘"
       subtitle="实时监控热点动态"
       actions={
-        <Button icon={<Eye size={18} />} onClick={fetchData}>
-          刷新数据
+        <Button 
+          variant="primary"
+          icon={<Sparkles size={16} />}
+          onClick={() => window.location.href = '/keywords'}
+        >
+          添加关键词
         </Button>
       }
     >
-      <div className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard
-            title="监控关键词"
-            value={keywords.length}
-            icon={<Flame size={24} />}
-          />
-          <StatCard
-            title="今日热点"
-            value={todayHotspots}
-            icon={<TrendingUp size={24} />}
-          />
-          <StatCard
-            title="活跃关键词"
-            value={activeKeywords}
-            icon={<Bell size={24} />}
-          />
-          <StatCard
-            title="总热点数"
-            value={hotspots.length}
-            icon={<Eye size={24} />}
-          />
+      {loading ? (
+        <div className="flex items-center justify-center h-64">
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-12 h-12 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+            <p className="text-foreground-muted">加载中...</p>
+          </div>
         </div>
+      ) : (
+        <div className="space-y-8 animate-fade-in">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <StatCard
+              title="活跃关键词"
+              value={activeKeywords}
+              icon={<Search size={20} />}
+              color="primary"
+              change={12}
+              trend="up"
+            />
+            <StatCard
+              title="热点总数"
+              value={totalHotspots}
+              icon={<Flame size={20} />}
+              color="orange"
+              change={8}
+              trend="up"
+            />
+            <StatCard
+              title="通知数"
+              value={24}
+              icon={<Bell size={20} />}
+              color="secondary"
+              change={-3}
+              trend="down"
+            />
+            <StatCard
+              title="平均热度"
+              value={67}
+              icon={<TrendingUp size={20} />}
+              color="green"
+              change={15}
+              trend="up"
+            />
+          </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
-            <Card>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-foreground">最新热点</h3>
-                <Button variant="outline" size="sm" onClick={() => window.location.href = '/hotspots'}>
-                  查看全部
-                </Button>
-              </div>
-              
-              {loading ? (
-                <div className="text-center py-8 text-foreground-muted">加载中...</div>
-              ) : hotspots.length === 0 ? (
-                <div className="text-center py-8 text-foreground-muted">
-                  暂无热点数据，请先添加关键词
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2">
+              <Card className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-accent-orange/10">
+                      <Flame size={20} className="text-accent-orange" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-foreground">最新热点</h3>
+                      <p className="text-sm text-foreground-muted">实时热门内容</p>
+                    </div>
+                  </div>
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={() => window.location.href = '/hotspots'}
+                  >
+                    查看全部
+                    <ArrowRight size={14} />
+                  </Button>
                 </div>
-              ) : (
+
                 <div className="space-y-3">
-                  {hotspots.map((hotspot) => (
-                    <div 
-                      key={hotspot.id}
-                      className="p-4 bg-background-secondary rounded-lg border border-border hover:border-border-light transition-all cursor-pointer"
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            {hotspot.category && (
-                              <Badge variant="info">{hotspot.category}</Badge>
-                            )}
-                            <Badge variant="default">{hotspot.source}</Badge>
-                            {hotspot.isVerified && (
-                              <Badge variant="success">已验证</Badge>
-                            )}
-                          </div>
-                          <h4 className="text-foreground font-medium mb-1">
-                            {hotspot.title}
-                          </h4>
-                          <div className="flex items-center gap-2 text-sm text-foreground-muted">
-                            <Clock size={14} />
-                            <span>{new Date(hotspot.createdAt).toLocaleString('zh-CN')}</span>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <HeatBadge score={hotspot.heatScore} />
-                          {hotspot.sourceUrl && (
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              icon={<ExternalLink size={16} />}
-                              onClick={() => window.open(hotspot.sourceUrl!, '_blank')}
-                            >
-                              查看
-                            </Button>
-                          )}
-                        </div>
+                  {hotspots.length === 0 ? (
+                    <div className="text-center py-12">
+                      <div className="w-16 h-16 rounded-full bg-card-hover mx-auto mb-4 flex items-center justify-center">
+                        <Flame size={24} className="text-foreground-subtle" />
                       </div>
+                      <p className="text-foreground-muted">暂无热点</p>
+                      <p className="text-sm text-foreground-subtle mt-1">
+                        添加关键词开始监控
+                      </p>
                     </div>
-                  ))}
+                  ) : (
+                    hotspots.map((hotspot, index) => (
+                      <HotspotCard
+                        key={hotspot.id}
+                        title={hotspot.title}
+                        source={hotspot.source}
+                        heatScore={hotspot.heatScore}
+                        time={formatTime(hotspot.publishedAt)}
+                        category={hotspot.keyword?.keyword}
+                      />
+                    ))
+                  )}
                 </div>
-              )}
-            </Card>
-          </div>
+              </Card>
+            </div>
 
-          <div>
-            <Card>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-foreground">监控关键词</h3>
-                <Button variant="outline" size="sm" onClick={() => window.location.href = '/keywords'}>
-                  管理
-                </Button>
-              </div>
-              
-              {loading ? (
-                <div className="text-center py-4 text-foreground-muted">加载中...</div>
-              ) : keywords.length === 0 ? (
-                <div className="text-center py-4 text-foreground-muted">
-                  暂无关键词
+            <div className="space-y-6">
+              <Card className="p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 rounded-lg bg-primary/10">
+                    <Search size={20} className="text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-foreground">关键词</h3>
+                    <p className="text-sm text-foreground-muted">监控列表</p>
+                  </div>
                 </div>
-              ) : (
+
                 <div className="space-y-2">
-                  {keywords.slice(0, 5).map((kw) => (
+                  {keywords.slice(0, 5).map((keyword) => (
                     <div 
-                      key={kw.id}
-                      className="flex items-center justify-between p-3 bg-background-secondary rounded-lg border border-border"
+                      key={keyword.id}
+                      className="flex items-center justify-between p-3 rounded-lg bg-background-tertiary/50 hover:bg-background-tertiary transition-colors"
                     >
-                      <div>
-                        <p className="text-foreground font-medium">{kw.keyword}</p>
-                        {kw.category && (
-                          <p className="text-sm text-foreground-muted">{kw.category}</p>
-                        )}
+                      <div className="flex items-center gap-3">
+                        <PulsingDot className={keyword.isActive ? '' : 'opacity-0'} />
+                        <span className="text-foreground font-medium">{keyword.keyword}</span>
                       </div>
-                      <div className={`w-2 h-2 rounded-full ${kw.isActive ? 'bg-accent-green' : 'bg-foreground-subtle'}`} />
+                      <Badge variant={keyword.isActive ? 'success' : 'default'}>
+                        {keyword.isActive ? '活跃' : '暂停'}
+                      </Badge>
                     </div>
                   ))}
                 </div>
-              )}
-              
-              <Button variant="outline" className="w-full mt-4" onClick={() => window.location.href = '/keywords'}>
-                管理关键词
-              </Button>
-            </Card>
+
+                {keywords.length > 5 && (
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="w-full mt-4"
+                    onClick={() => window.location.href = '/keywords'}
+                  >
+                    查看全部关键词
+                  </Button>
+                )}
+              </Card>
+
+              <Card className="p-6 glow-border">
+                <div className="text-center">
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-accent-green/10 text-accent-green text-sm font-medium mb-4">
+                    <PulsingDot />
+                    实时监控中
+                  </div>
+                  <h3 className="text-lg font-semibold text-foreground mb-2">
+                    系统 <AnimatedGradientText>运行中</AnimatedGradientText>
+                  </h3>
+                  <p className="text-sm text-foreground-muted">
+                    正在监控 {activeKeywords} 个关键词，覆盖多个平台
+                  </p>
+                  <div className="flex items-center justify-center gap-4 mt-4 text-xs text-foreground-subtle">
+                    <div className="flex items-center gap-1">
+                      <Clock size={12} />
+                      <span>刚刚更新</span>
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </MainLayout>
   );
 }
