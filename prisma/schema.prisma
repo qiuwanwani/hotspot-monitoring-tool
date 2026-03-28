@@ -1,0 +1,97 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Keyword {
+  id              String   @id @default(cuid())
+  keyword         String
+  category        String?
+  isActive        Boolean  @default(true)
+  checkInterval   Int      @default(30)
+  lastCheckedAt   DateTime?
+  lastTriggeredAt DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  hotspots        Hotspot[]
+  notifications   Notification[]
+
+  @@index([keyword])
+  @@index([isActive])
+}
+
+model Hotspot {
+  id              String   @id @default(cuid())
+  title           String
+  content         String?
+  summary         String?
+  source          String
+  sourceUrl       String?
+  sourceId        String?
+  category        String?
+  heatScore       Int      @default(0)
+  isVerified      Boolean  @default(false)
+  isFake          Boolean  @default(false)
+  fakeReason      String?
+  keywordsMatched String?
+  publishedAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  keywords        Keyword[]
+  notifications   Notification[]
+
+  @@index([source])
+  @@index([category])
+  @@index([heatScore])
+  @@index([createdAt])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  type      String
+  status    String   @default("pending")
+  sentAt    DateTime?
+  error     String?
+  createdAt DateTime @default(now())
+  hotspot   Hotspot  @relation(fields: [hotspotId], references: [id])
+  hotspotId String
+  keyword   Keyword? @relation(fields: [keywordId], references: [id])
+  keywordId String?
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model UserSettings {
+  id                String   @id @default(cuid())
+  notificationEnabled Boolean @default(true)
+  email             String?
+  pushEnabled       Boolean  @default(true)
+  quietHoursStart   String?
+  quietHoursEnd     String?
+  aiProvider        String   @default("openrouter")
+  aiApiKey          String?
+  aiBaseUrl         String?
+  aiModel           String?
+  twitterApiKey     String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model DataSource {
+  id          String   @id @default(cuid())
+  name        String
+  type        String
+  config      String
+  isActive    Boolean  @default(true)
+  lastFetched DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([type])
+  @@index([isActive])
+}
