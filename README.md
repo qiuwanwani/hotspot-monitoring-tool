@@ -1,2 +1,1 @@
 # hotspot-monitoring-tool
-
