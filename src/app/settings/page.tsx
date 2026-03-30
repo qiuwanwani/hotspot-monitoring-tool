@@ -19,9 +19,9 @@ export default function SettingsPage() {
     pushEnabled: false,
     quietHoursStart: '22:00',
     quietHoursEnd: '08:00',
-    aiProvider: 'openrouter',
-    openrouterApiKey: '',
+    aiBaseUrl: '',
     aiModel: '',
+    aiApiKey: '',
     twitterApiKey: '',
     smtpHost: '',
     smtpPort: '587',
@@ -133,25 +133,12 @@ export default function SettingsPage() {
 
           <div className="space-y-4">
             <div>
-              <label className="text-sm font-medium text-foreground-muted mb-2 block">AI 提供商</label>
-              <select
-                value={settings.aiProvider}
-                onChange={(e) => setSettings({ ...settings, aiProvider: e.target.value })}
-                className="w-full px-4 py-3 rounded-xl bg-background-tertiary border border-border text-foreground focus:outline-none focus:border-primary/50"
-              >
-                <option value="openrouter">OpenRouter</option>
-                <option value="openai">OpenAI</option>
-                <option value="anthropic">Anthropic</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium text-foreground-muted mb-2 block">API 密钥</label>
+              <label className="text-sm font-medium text-foreground-muted mb-2 block">API 基础 URL</label>
               <input
-                type="password"
-                value={settings.openrouterApiKey}
-                onChange={(e) => setSettings({ ...settings, openrouterApiKey: e.target.value })}
-                placeholder="sk-..."
+                type="url"
+                value={settings.aiBaseUrl}
+                onChange={(e) => setSettings({ ...settings, aiBaseUrl: e.target.value })}
+                placeholder="例如：https://api.openrouter.ai/v1"
                 className="w-full px-4 py-3 rounded-xl bg-background-tertiary border border-border text-foreground placeholder:text-foreground-subtle focus:outline-none focus:border-primary/50"
               />
             </div>
@@ -163,6 +150,17 @@ export default function SettingsPage() {
                 value={settings.aiModel}
                 onChange={(e) => setSettings({ ...settings, aiModel: e.target.value })}
                 placeholder="例如：anthropic/claude-3-sonnet"
+                className="w-full px-4 py-3 rounded-xl bg-background-tertiary border border-border text-foreground placeholder:text-foreground-subtle focus:outline-none focus:border-primary/50"
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-foreground-muted mb-2 block">API 密钥</label>
+              <input
+                type="password"
+                value={settings.aiApiKey}
+                onChange={(e) => setSettings({ ...settings, aiApiKey: e.target.value })}
+                placeholder="sk-..."
                 className="w-full px-4 py-3 rounded-xl bg-background-tertiary border border-border text-foreground placeholder:text-foreground-subtle focus:outline-none focus:border-primary/50"
               />
             </div>
