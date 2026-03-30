@@ -44,6 +44,10 @@ export default function DashboardPage() {
 
   const activeKeywords = keywords.filter(k => k.isActive).length;
   const totalHotspots = hotspots.length;
+  const totalNotifications = keywords.reduce((sum, k) => sum + (k._count?.notifications || 0), 0);
+  const averageHeatScore = hotspots.length > 0 
+    ? Math.round(hotspots.reduce((sum, h) => sum + h.heatScore, 0) / hotspots.length)
+    : 0;
 
   const formatTime = (dateString: string | null) => {
     if (!dateString) return '从未';
@@ -88,7 +92,7 @@ export default function DashboardPage() {
               value={activeKeywords}
               icon={<Search size={20} />}
               color="primary"
-              change={12}
+              change={0}
               trend="up"
             />
             <StatCard
@@ -96,23 +100,23 @@ export default function DashboardPage() {
               value={totalHotspots}
               icon={<Flame size={20} />}
               color="orange"
-              change={8}
+              change={0}
               trend="up"
             />
             <StatCard
               title="通知数"
-              value={24}
+              value={totalNotifications}
               icon={<Bell size={20} />}
               color="secondary"
-              change={-3}
-              trend="down"
+              change={totalNotifications > 0 ? 0 : 0}
+              trend="up"
             />
             <StatCard
               title="平均热度"
-              value={67}
+              value={averageHeatScore}
               icon={<TrendingUp size={20} />}
               color="green"
-              change={15}
+              change={averageHeatScore > 0 ? 0 : 0}
               trend="up"
             />
           </div>

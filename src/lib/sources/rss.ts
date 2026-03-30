@@ -83,6 +83,10 @@ export class RSSDataSource extends BaseDataSource {
     const feeds = config.feeds || this.defaultConfig.feeds;
     const hotspots: SourceHotspot[] = [];
 
+    if (!keywords || keywords.length === 0) {
+      return [];
+    }
+
     for (const feed of feeds) {
       try {
         const items = await this.fetchFeed(feed.url, config);
