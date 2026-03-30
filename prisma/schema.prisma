@@ -43,6 +43,8 @@ model Hotspot {
   updatedAt       DateTime @updatedAt
   keywords        Keyword[]
   notifications   Notification[]
+  dataSourceId    String?
+  dataSource      DataSource? @relation(fields: [dataSourceId], references: [id])
 
   @@index([source])
   @@index([category])
@@ -85,12 +87,15 @@ model UserSettings {
 model DataSource {
   id          String   @id @default(cuid())
   name        String
-  type        String
+  type        String   // twitter, hackernews, reddit, rss, etc.
   config      String
   isActive    Boolean  @default(true)
+  weight      Int      @default(1)
+  minScore    Int      @default(30)
   lastFetched DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  hotspots    Hotspot[]
 
   @@index([type])
   @@index([isActive])

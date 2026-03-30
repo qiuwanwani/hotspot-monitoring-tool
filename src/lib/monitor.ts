@@ -1,21 +1,20 @@
 import cron from 'node-cron';
 import prisma from '@/lib/prisma';
-import { webCrawler } from './crawler';
-import { rssFetcher, DEFAULT_RSS_FEEDS } from './rss';
-import { twitterAPI } from './twitter';
+import { dataSourceManager, SourceHotspot } from '@/lib/sources';
 import { aiService } from './ai';
 import { notificationService } from './notification';
 
 export class MonitorService {
   private jobs: Map<string, cron.ScheduledTask> = new Map();
+  private initialized = false;
 
-  start() {
+  async start() {
     console.log('🔍 热点监控服务启动...');
     
-    this.scheduleKeywordChecks();
+    await dataSourceManager.initialize();
+    this.initialized = true;
     
-    this.scheduleRSSFetch();
-    
+    this.scheduleDataFetch();
     this.scheduleCleanup();
   }
 
@@ -28,22 +27,13 @@ export class MonitorService {
     this.jobs.clear();
   }
 
-  private scheduleKeywordChecks() {
+  private scheduleDataFetch() {
     const job = cron.schedule('*/5 * * * *', async () => {
-      await this.checkKeywords();
+      await this.fetchData();
     });
 
-    this.jobs.set('keyword-check', job);
-    console.log('  - 启动任务: 关键词检查 (每5分钟)');
-  }
-
-  private scheduleRSSFetch() {
-    const job = cron.schedule('*/10 * * * *', async () => {
-      await this.fetchRSSFeeds();
-    });
-
-    this.jobs.set('rss-fetch', job);
-    console.log('  - 启动任务: RSS 抓取 (每10分钟)');
+    this.jobs.set('data-fetch', job);
+    console.log('  - 启动任务: 数据获取 (每5分钟)');
   }
 
   private scheduleCleanup() {
@@ -55,130 +45,99 @@ export class MonitorService {
     console.log('  - 启动任务: 数据清理 (每天凌晨)');
   }
 
-  private async checkKeywords() {
+  private async fetchData() {
+    if (!this.initialized) {
+      console.warn('监控服务未初始化，跳过数据获取');
+      return;
+    }
+
     try {
+      console.log('📡 开始获取数据...');
+      
       const keywords = await prisma.keyword.findMany({
-        where: { isActive: true }
+        where: { isActive: true },
       });
 
-      for (const kw of keywords) {
-        const lastChecked = kw.lastCheckedAt;
-        const shouldCheck = !lastChecked || 
-          (Date.now() - lastChecked.getTime()) > kw.checkInterval * 60 * 1000;
+      const keywordStrings = keywords.map(k => k.keyword);
+      const hotspots = await dataSourceManager.fetchAll(keywordStrings);
 
-        if (!shouldCheck) continue;
+      console.log(`  - 共获取 ${hotspots.length} 条热点`);
 
-        console.log(`🔍 检查关键词: ${kw.keyword}`);
+      for (const hotspot of hotspots) {
+        await this.processHotspot(hotspot, keywords);
+      }
 
-        const tweets = await twitterAPI.searchTweets(kw.keyword, { limit: 10 });
-        
-        for (const tweet of tweets) {
-          await this.processTweet(tweet, kw.keyword);
-        }
+      console.log('✅ 数据获取完成');
+    } catch (error) {
+      console.error('数据获取失败:', error);
+    }
+  }
 
-        await prisma.keyword.update({
-          where: { id: kw.id },
-          data: { lastCheckedAt: new Date() }
+  private async processHotspot(hotspot: SourceHotspot, keywords: any[]) {
+    try {
+      const existing = await prisma.hotspot.findFirst({
+        where: {
+          OR: [
+            { sourceId: hotspot.sourceId, source: hotspot.source },
+            { sourceUrl: hotspot.sourceUrl },
+          ],
+        },
+      });
+
+      if (existing) {
+        return;
+      }
+
+      const matchedKeywords = keywords.filter(k => 
+        hotspot.title.toLowerCase().includes(k.keyword.toLowerCase()) ||
+        (hotspot.content && hotspot.content.toLowerCase().includes(k.keyword.toLowerCase()))
+      );
+
+      const createdHotspot = await prisma.hotspot.create({
+        data: {
+          title: hotspot.title,
+          content: hotspot.content,
+          source: hotspot.source,
+          sourceUrl: hotspot.sourceUrl,
+          sourceId: hotspot.sourceId,
+          category: hotspot.category,
+          heatScore: hotspot.heatScore,
+          keywordsMatched: matchedKeywords.map(k => k.keyword).join(','),
+          publishedAt: hotspot.publishedAt,
+          dataSourceId: hotspot.metadata?.dataSourceId,
+        },
+      });
+
+      for (const keyword of matchedKeywords) {
+        await prisma.hotspot.update({
+          where: { id: createdHotspot.id },
+          data: {
+            keywords: {
+              connect: { id: keyword.id },
+            },
+          },
         });
-      }
-    } catch (error) {
-      console.error('关键词检查失败:', error);
-    }
-  }
 
-  private async fetchRSSFeeds() {
-    try {
-      const dataSources = await prisma.dataSource.findMany({
-        where: { isActive: true, type: 'rss' }
-      });
-
-      const feeds = dataSources.length > 0 
-        ? dataSources.map(ds => JSON.parse(ds.config).url)
-        : DEFAULT_RSS_FEEDS;
-
-      const items = await rssFetcher.fetchMultiple(feeds);
-
-      for (const item of items) {
-        await this.processRSSItem(item);
-      }
-
-      console.log(`📰 RSS 抓取完成: ${items.length} 条`);
-    } catch (error) {
-      console.error('RSS 抓取失败:', error);
-    }
-  }
-
-  private async processTweet(tweet: any, keyword: string) {
-    try {
-      const existing = await prisma.hotspot.findFirst({
-        where: { sourceId: tweet.id, source: 'Twitter' }
-      });
-
-      if (existing) return;
-
-      const heatScore = twitterAPI.calculateHeatScore(tweet);
-
-      const hotspot = await prisma.hotspot.create({
-        data: {
-          title: tweet.text.slice(0, 100),
-          content: tweet.text,
-          source: 'Twitter',
-          sourceUrl: tweet.url,
-          sourceId: tweet.id,
-          category: '社交媒体',
-          heatScore,
-          keywordsMatched: keyword,
-          publishedAt: tweet.publishedAt
-        }
-      });
-
-      const kw = await prisma.keyword.findFirst({
-        where: { keyword }
-      });
-
-      if (kw && heatScore >= 60) {
-        const settings = await prisma.userSettings.findFirst();
-        
-        if (settings?.notificationEnabled) {
-          await notificationService.sendNotification({
-            type: 'both',
-            keywordId: kw.id,
-            hotspotId: hotspot.id,
-            keyword,
-            title: tweet.text.slice(0, 100),
-            url: tweet.url,
-            source: 'Twitter',
-            heatScore,
-            email: settings.email || undefined
-          });
+        if (hotspot.heatScore >= 60) {
+          const settings = await prisma.userSettings.findFirst();
+          
+          if (settings?.notificationEnabled) {
+            await notificationService.sendNotification({
+              type: 'both',
+              keywordId: keyword.id,
+              hotspotId: createdHotspot.id,
+              keyword: keyword.keyword,
+              title: hotspot.title,
+              url: hotspot.sourceUrl,
+              source: hotspot.source,
+              heatScore: hotspot.heatScore,
+              email: settings.email || undefined,
+            });
+          }
         }
       }
     } catch (error) {
-      console.error('处理推文失败:', error);
-    }
-  }
-
-  private async processRSSItem(item: any) {
-    try {
-      const existing = await prisma.hotspot.findFirst({
-        where: { sourceUrl: item.url }
-      });
-
-      if (existing) return;
-
-      await prisma.hotspot.create({
-        data: {
-          title: item.title,
-          content: item.content,
-          source: item.source,
-          sourceUrl: item.url,
-          category: '新闻',
-          heatScore: 50,
-          publishedAt: item.publishedAt
-        }
-      });
-    } catch (error) {
-      console.error('处理 RSS 条目失败:', error);
+      console.error('处理热点失败:', error);
     }
   }
 
@@ -189,8 +148,8 @@ export class MonitorService {
       const deleted = await prisma.hotspot.deleteMany({
         where: {
           createdAt: { lt: thirtyDaysAgo },
-          heatScore: { lt: 30 }
-        }
+          heatScore: { lt: 30 },
+        },
       });
 
       console.log(`🧹 清理完成: 删除 ${deleted.count} 条旧数据`);
@@ -201,7 +160,7 @@ export class MonitorService {
 
   async analyzeHotspot(hotspotId: string) {
     const hotspot = await prisma.hotspot.findUnique({
-      where: { id: hotspotId }
+      where: { id: hotspotId },
     });
 
     if (!hotspot) {
@@ -223,8 +182,8 @@ export class MonitorService {
       data: {
         isFake: analysis.isFake,
         fakeReason: analysis.reason,
-        summary
-      }
+        summary,
+      },
     });
 
     return analysis;
