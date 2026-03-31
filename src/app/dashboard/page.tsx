@@ -218,17 +218,44 @@ export default function DashboardPage() {
                     <PulsingDot />
                     实时监控中
                   </div>
-                  <h3 className="text-lg font-semibold text-foreground mb-2">
+                  <h3 className="text-lg font-semibold text-foreground mb-4">
                     系统 <AnimatedGradientText>运行中</AnimatedGradientText>
                   </h3>
-                  <p className="text-sm text-foreground-muted">
-                    正在监控 {activeKeywords} 个关键词，覆盖多个平台
-                  </p>
-                  <div className="flex items-center justify-center gap-4 mt-4 text-xs text-foreground-subtle">
-                    <div className="flex items-center gap-1">
-                      <Clock size={12} />
-                      <span>刚刚更新</span>
+                  <div className="space-y-3 text-sm text-left">
+                    <div className="flex items-center justify-between">
+                      <span className="text-foreground-muted">系统状态</span>
+                      <span className="text-accent-green font-medium">运行中</span>
                     </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-foreground-muted">监控服务</span>
+                      <span className="text-accent-green font-medium">活跃</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-foreground-muted">最近更新</span>
+                      <span className="text-foreground">{formatTime(new Date().toISOString())}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-foreground-muted">监控关键词</span>
+                      <span className="text-foreground">{activeKeywords} 个</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-foreground-muted">数据源</span>
+                      <span className="text-foreground">3 个</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-foreground-muted">热点总数</span>
+                      <span className="text-foreground">{totalHotspots} 条</span>
+                    </div>
+                  </div>
+                  <div className="mt-4 pt-4 border-t border-border/50">
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="w-full"
+                      onClick={() => window.location.href = '/hotspots'}
+                    >
+                      查看热点
+                    </Button>
                   </div>
                 </div>
               </Card>
