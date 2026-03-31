@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import MainLayout from '@/components/layout/MainLayout';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
-import { api, Hotspot, PaginatedResponse } from '@/lib/api';
+import { api, Hotspot, PaginatedResponse, Notification } from '@/lib/api';
 import { 
   Search, 
   TrendingUp,
@@ -15,19 +15,55 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
-  Globe
+  Globe,
+  ChevronDown,
+  Bell,
+  BellOff,
+  Check
 } from 'lucide-react';
 
 export default function HotspotsPage() {
   const [data, setData] = useState<PaginatedResponse<Hotspot> | null>(null);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [page, setPage] = useState(1);
   const [selectedSource, setSelectedSource] = useState<string>('all');
+  const [sourceDropdownOpen, setSourceDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchHotspots();
+    fetchNotifications();
   }, [page]);
+
+  const fetchNotifications = async () => {
+    try {
+      const notificationData = await api.getNotifications();
+      setNotifications(notificationData);
+    } catch (error) {
+      console.error('获取通知失败:', error);
+    }
+  };
+
+  const handleMarkAsRead = async (id: string) => {
+    try {
+      await api.markNotificationRead(id);
+      fetchNotifications();
+    } catch (error) {
+      console.error('标记失败:', error);
+    }
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setSourceDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const fetchHotspots = async () => {
     try {
@@ -83,7 +119,8 @@ export default function HotspotsPage() {
     };
   };
 
-  const sources = ['all', ...new Set(data?.data.map(h => h.source) || [])];
+  const defaultSources = ['Twitter', 'Hacker News', 'Reddit', 'RSS', '百度搜索', 'Bing搜索'];
+  const sources = ['all', ...new Set([...defaultSources, ...(data?.data.map(h => h.source) || [])])];
   
   const filteredHotspots = data?.data.filter(hotspot => {
     const matchesSearch = hotspot.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -98,17 +135,45 @@ export default function HotspotsPage() {
       subtitle="发现各平台热门内容"
       actions={
         <div className="flex items-center gap-3">
-          <select
-            value={selectedSource}
-            onChange={(e) => setSelectedSource(e.target.value)}
-            className="px-4 py-2 rounded-lg bg-card border border-border text-foreground focus:outline-none focus:border-primary/50"
-          >
-            {sources.map(source => (
-              <option key={source} value={source}>
-                {source === 'all' ? '所有来源' : source}
-              </option>
-            ))}
-          </select>
+          <div ref={dropdownRef} className="relative">
+            <button
+              onClick={() => setSourceDropdownOpen(!sourceDropdownOpen)}
+              className="inline-flex items-center justify-center gap-2 font-medium rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50 disabled:cursor-not-allowed border border-border text-foreground hover:bg-card hover:border-border-light active:scale-[0.98] px-4 py-2 text-sm"
+            >
+              <Globe size={14} className="text-foreground-muted" />
+              <span className="text-sm font-medium">
+                {selectedSource === 'all' ? '所有来源' : selectedSource}
+              </span>
+              <ChevronDown size={14} className={`text-foreground-muted transition-transform duration-200 ${sourceDropdownOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {sourceDropdownOpen && (
+              <div className="absolute right-0 top-full mt-2 w-36 py-1.5 rounded-lg border border-border bg-card shadow-lg shadow-black/10 backdrop-blur-xl z-50 animate-fade-in">
+                <button
+                  onClick={() => { setSelectedSource('all'); setSourceDropdownOpen(false); }}
+                  className={`w-full text-left px-4 py-2.5 text-sm transition-colors cursor-pointer ${
+                    selectedSource === 'all'
+                      ? 'text-primary bg-primary/10 font-medium'
+                      : 'text-foreground hover:bg-card-hover'
+                  }`}
+                >
+                  所有来源
+                </button>
+                {sources.filter(s => s !== 'all').map(source => (
+                  <button
+                    key={source}
+                    onClick={() => { setSelectedSource(source); setSourceDropdownOpen(false); }}
+                    className={`w-full text-left px-4 py-2.5 text-sm transition-colors cursor-pointer ${
+                      selectedSource === source
+                        ? 'text-primary bg-primary/10 font-medium'
+                        : 'text-foreground hover:bg-card-hover'
+                    }`}
+                  >
+                    {source}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <Button variant="outline" icon={<Filter size={16} />}>
             筛选
           </Button>
@@ -149,12 +214,14 @@ export default function HotspotsPage() {
             <div className="grid gap-4">
               {filteredHotspots.map((hotspot, index) => {
                 const heatConfig = getHeatConfig(hotspot.heatScore);
+                const hotspotNotifications = notifications.filter(n => n.hotspotId === hotspot.id);
+                const unreadNotifications = hotspotNotifications.filter(n => !n.isRead);
                 
                 return (
                   <Card 
                     key={hotspot.id} 
                     hover
-                    className="p-5 animate-slide-up hotspot-item"
+                    className={`p-5 animate-slide-up hotspot-item ${unreadNotifications.length > 0 ? 'border-primary/30' : ''}`}
                     style={{ animationDelay: `${index * 50}ms` }}
                   >
                     <div className="flex gap-5">
@@ -172,17 +239,31 @@ export default function HotspotsPage() {
                           <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors line-clamp-2">
                             {hotspot.title}
                           </h3>
-                          {hotspot.url && (
-                            <a
-                              href={hotspot.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex-shrink-0 p-2 rounded-lg hover:bg-card transition-colors"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <ExternalLink size={16} className="text-foreground-muted hover:text-primary" />
-                            </a>
-                          )}
+                          <div className="flex items-center gap-2">
+                            {hotspot.sourceUrl && (
+                              <a
+                                href={hotspot.sourceUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex-shrink-0 p-2 rounded-lg hover:bg-card transition-colors"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <ExternalLink size={16} className="text-foreground-muted hover:text-primary" />
+                              </a>
+                            )}
+                            {unreadNotifications.length > 0 && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => unreadNotifications.forEach(n => handleMarkAsRead(n.id))}
+                                icon={<Check size={14} />}
+                                className="text-primary"
+                              />
+                            )}
+                            {unreadNotifications.length > 0 && (
+                              <div className="w-2 h-2 rounded-full bg-primary flex-shrink-0 mt-2" />
+                            )}
+                          </div>
                         </div>
 
                         {hotspot.summary && (
@@ -197,14 +278,21 @@ export default function HotspotsPage() {
                             <Badge variant="default">{hotspot.source}</Badge>
                           </div>
                           
-                          {hotspot.keyword && (
-                            <Badge variant="secondary">{hotspot.keyword.keyword}</Badge>
-                          )}
+                          {hotspot.keywords && hotspot.keywords.map((kw, i) => (
+                            <Badge key={i} variant="secondary">{kw.keyword}</Badge>
+                          ))}
                           
                           <div className="flex items-center gap-1 text-xs text-foreground-subtle">
                             <Clock size={12} />
                             <span>{formatTime(hotspot.publishedAt)}</span>
                           </div>
+                          
+                          {unreadNotifications.length > 0 && (
+                            <div className="flex items-center gap-1 text-xs text-primary">
+                              <Bell size={12} />
+                              <span>{unreadNotifications.length} 条未读通知</span>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>

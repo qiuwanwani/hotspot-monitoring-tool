@@ -16,23 +16,22 @@ export async function GET(req: NextRequest) {
       heatScore: { gte: minHeat }
     };
     
-    const [hotspots, total] = await Promise.all([
-      prisma.hotspot.findMany({
-        where,
-        include: {
-          keywords: {
-            select: { keyword: true, category: true }
-          }
-        },
-        orderBy: { createdAt: 'desc' },
-        skip: (page - 1) * limit,
-        take: limit
-      }),
-      prisma.hotspot.count({ where })
-    ]);
+    const total = await prisma.hotspot.count({ where });
+    
+    const paginatedHotspots = await prisma.hotspot.findMany({
+      where,
+      include: {
+        keywords: {
+          select: { id: true, keyword: true, category: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+      skip: (page - 1) * limit,
+      take: limit
+    });
     
     return NextResponse.json({
-      data: hotspots,
+      data: paginatedHotspots,
       pagination: {
         page,
         limit,
@@ -41,6 +40,7 @@ export async function GET(req: NextRequest) {
       }
     });
   } catch (error) {
+    console.error('获取热点列表失败:', error);
     return NextResponse.json(
       { error: '获取热点列表失败' },
       { status: 500 }

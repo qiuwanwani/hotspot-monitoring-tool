@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { monitorService } from '@/lib/monitor';
 
 export async function GET() {
   try {
@@ -49,7 +50,21 @@ export async function POST(req: NextRequest) {
         keyword,
         category,
         checkInterval
+      },
+      include: {
+        _count: {
+          select: { hotspots: true, notifications: true }
+        }
       }
+    });
+    
+    // 立即触发数据获取，确保新关键词能立即获取热点
+    console.log('触发数据获取以处理新添加的关键词:', keyword);
+    // 异步执行数据获取，不阻塞API响应
+    monitorService.fetchNow().then(() => {
+      console.log('数据获取触发成功');
+    }).catch((error) => {
+      console.error('触发数据获取失败:', error);
     });
     
     return NextResponse.json(newKeyword, { status: 201 });

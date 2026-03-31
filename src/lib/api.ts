@@ -47,6 +47,9 @@ export interface Notification {
   keywordId: string | null;
   hotspot?: Hotspot;
   keyword?: Keyword;
+  isRead?: boolean;
+  title?: string;
+  message?: string;
 }
 
 export interface UserSettings {
@@ -173,6 +176,22 @@ class ApiClient {
     return this.request<Hotspot>(`/hotspots/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
+    });
+  }
+
+  async getNotifications(): Promise<Notification[]> {
+    return this.request<Notification[]>('/notifications');
+  }
+
+  async markNotificationRead(id: string): Promise<Notification> {
+    return this.request<Notification>(`/notifications/${id}/read`, {
+      method: 'PUT',
+    });
+  }
+
+  async markAllNotificationsRead(): Promise<{ success: boolean }> {
+    return this.request<{ success: boolean }>('/notifications/read-all', {
+      method: 'PUT',
     });
   }
 }

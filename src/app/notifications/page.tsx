@@ -179,7 +179,7 @@ export default function NotificationsPage() {
                         
                         {notification.hotspot && (
                           <a
-                            href={notification.hotspot.url || '#'}
+                            href={notification.hotspot.sourceUrl || '#'}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="flex items-center gap-1 text-xs text-primary hover:underline"

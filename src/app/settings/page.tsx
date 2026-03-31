@@ -1,12 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import MainLayout from '@/components/layout/MainLayout';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
-import { 
-  Bell, 
-  Mail, 
+import {
+  Bell,
+  Mail,
   Clock,
   Sparkles,
   Check
@@ -31,12 +31,65 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  useEffect(() => {
+    fetchSettings();
+  }, []);
+
+  const fetchSettings = async () => {
+    try {
+      const response = await fetch('/api/settings');
+      const data = await response.json();
+      if (data) {
+        setSettings({
+          notificationEnabled: data.notificationEnabled !== undefined ? data.notificationEnabled : true,
+          email: data.email || '',
+          pushEnabled: data.pushEnabled !== undefined ? data.pushEnabled : false,
+          quietHoursStart: data.quietHoursStart || '22:00',
+          quietHoursEnd: data.quietHoursEnd || '08:00',
+          aiBaseUrl: data.aiBaseUrl || '',
+          aiModel: data.aiModel || '',
+          aiApiKey: data.aiApiKey || '',
+          twitterApiKey: data.twitterApiKey || '',
+          smtpHost: data.smtpHost || '',
+          smtpPort: data.smtpPort || '587',
+          smtpUser: data.smtpUser || '',
+          smtpPass: data.smtpPass || '',
+        });
+      }
+    } catch (error) {
+      console.error('获取设置失败:', error);
+    }
+  };
+
   const handleSave = async () => {
-    setLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setLoading(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+    try {
+      console.log('开始保存设置...');
+      setLoading(true);
+      console.log('发送请求到 /api/settings');
+      const response = await fetch('/api/settings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(settings),
+      });
+      
+      console.log('响应状态:', response.status);
+      if (response.ok) {
+        console.log('保存成功');
+        setSaved(true);
+        setTimeout(() => setSaved(false), 3000);
+      } else {
+        const error = await response.json();
+        console.log('保存失败:', error);
+        throw new Error(error.error || '保存失败');
+      }
+    } catch (error) {
+      console.error('保存设置失败:', error);
+    } finally {
+      setLoading(false);
+      console.log('保存操作完成');
+    }
   };
 
   return (

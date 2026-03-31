@@ -55,7 +55,15 @@ export default function KeywordsPage() {
       });
       setShowModal(false);
       setFormData({ keyword: '', category: '', checkInterval: 30 });
-      fetchKeywords();
+      await fetchKeywords();
+      // 立即触发数据获取（通过API）
+      try {
+        await fetch('/api/monitor/fetch', {
+          method: 'POST',
+        });
+      } catch (error) {
+        console.log('数据获取可能需要等待监控服务初始化:', error);
+      }
     } catch (error: any) {
       alert(error.message);
     }
@@ -72,7 +80,15 @@ export default function KeywordsPage() {
       setShowModal(false);
       setEditingKeyword(null);
       setFormData({ keyword: '', category: '', checkInterval: 30 });
-      fetchKeywords();
+      await fetchKeywords();
+      // 立即触发数据获取（通过API）
+      try {
+        await fetch('/api/monitor/fetch', {
+          method: 'POST',
+        });
+      } catch (error) {
+        console.log('数据获取可能需要等待监控服务初始化:', error);
+      }
     } catch (error: any) {
       alert(error.message);
     }
@@ -81,17 +97,32 @@ export default function KeywordsPage() {
   const handleToggle = async (keyword: Keyword) => {
     try {
       await api.updateKeyword(keyword.id, { isActive: !keyword.isActive });
-      fetchKeywords();
+      await fetchKeywords();
+      // 立即触发数据获取（通过API）
+      try {
+        await fetch('/api/monitor/fetch', {
+          method: 'POST',
+        });
+      } catch (error) {
+        console.log('数据获取可能需要等待监控服务初始化:', error);
+      }
     } catch (error: any) {
       alert(error.message);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('确定要删除这个关键词吗？')) return;
     try {
       await api.deleteKeyword(id);
-      fetchKeywords();
+      await fetchKeywords();
+      // 立即触发数据获取（通过API）
+      try {
+        await fetch('/api/monitor/fetch', {
+          method: 'POST',
+        });
+      } catch (error) {
+        console.log('数据获取可能需要等待监控服务初始化:', error);
+      }
     } catch (error: any) {
       alert(error.message);
     }

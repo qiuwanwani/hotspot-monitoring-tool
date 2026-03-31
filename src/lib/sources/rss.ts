@@ -18,58 +18,48 @@ export class RSSDataSource extends BaseDataSource {
   readonly defaultConfig: RSSConfig = {
     feeds: [
       {
-        name: '36氪',
-        url: 'https://36kr.com/feed',
+        name: 'BBC Technology',
+        url: 'https://feeds.bbci.co.uk/news/technology/rss.xml',
         category: '科技新闻',
       },
       {
-        name: '钛媒体',
-        url: 'https://www.tmtpost.com/rss',
+        name: 'TechCrunch',
+        url: 'https://techcrunch.com/feed/',
         category: '科技新闻',
       },
       {
-        name: '虎嗅',
-        url: 'https://www.huxiu.com/rss/0.xml',
-        category: '科技评论',
+        name: 'The Verge',
+        url: 'https://www.theverge.com/rss/index.xml',
+        category: '科技新闻',
       },
       {
-        name: '极客公园',
-        url: 'https://www.geekpark.net/rss',
-        category: '科技资讯',
+        name: 'Wired',
+        url: 'https://www.wired.com/feed/rss',
+        category: '科技新闻',
       },
       {
-        name: '爱范儿',
-        url: 'https://www.ifanr.com/feed',
-        category: '科技生活',
+        name: 'Ars Technica',
+        url: 'https://feeds.arstechnica.com/arstechnica/index',
+        category: '科技新闻',
       },
       {
-        name: '雷锋网',
-        url: 'https://www.leiphone.com/feed',
-        category: '人工智能',
+        name: 'Engadget',
+        url: 'https://www.engadget.com/rss.xml',
+        category: '科技新闻',
       },
       {
-        name: '机器之心',
-        url: 'https://www.jiqizhixin.com/feed',
-        category: '人工智能',
-      },
-      {
-        name: 'InfoQ',
-        url: 'https://www.infoq.cn/feed',
+        name: 'Hacker News',
+        url: 'https://hnrss.org/frontpage',
         category: '技术社区',
       },
       {
-        name: '掘金',
-        url: 'https://juejin.cn/rss',
-        category: '技术社区',
-      },
-      {
-        name: 'CSDN',
-        url: 'https://blog.csdn.net/rss/list',
-        category: '技术社区',
+        name: 'GitHub Trending',
+        url: 'https://mshibanami.github.io/GitHubTrendingRSS/daily.xml',
+        category: '开源项目',
       },
     ],
-    limit: 15,
-    minContentLength: 100,
+    limit: 20,
+    minContentLength: 50,
   };
   readonly defaultWeight = 1.5;
   readonly defaultMinScore = 25;
@@ -87,9 +77,15 @@ export class RSSDataSource extends BaseDataSource {
       return [];
     }
 
+    console.log(`📡 RSSDataSource: 开始搜索关键词:`, keywords);
+
     for (const feed of feeds) {
       try {
+        console.log(`   - 获取 RSS 源: ${feed.name}...`);
         const items = await this.fetchFeed(feed.url, config);
+        console.log(`     获取到 ${items.length} 条文章`);
+        
+        let matched = 0;
         for (const item of items) {
           if (!this.isValidItem(item, config)) {
             continue;
@@ -98,19 +94,23 @@ export class RSSDataSource extends BaseDataSource {
           const hotspot = this.itemToHotspot(item, feed);
           if (this.isValidContent(hotspot) && this.matchesKeywords(hotspot, keywords)) {
             hotspots.push(hotspot);
+            matched++;
           }
         }
+        console.log(`     匹配到 ${matched} 条相关文章`);
       } catch (error) {
         console.error(`获取 RSS 源 ${feed.name} 失败:`, error);
       }
     }
 
+    console.log(`✅ RSSDataSource: 共获取 ${hotspots.length} 条热点`);
     return hotspots;
   }
 
   private async fetchFeed(url: string, config: RSSConfig): Promise<any[]> {
     try {
       const response = await axios.get(url, {
+        timeout: 15000,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         },
@@ -118,7 +118,7 @@ export class RSSDataSource extends BaseDataSource {
 
       const parsed = await parseStringPromise(response.data);
       const items = parsed.rss?.channel[0]?.item || parsed.feed?.entry || [];
-      return items.slice(0, config.limit || 15);
+      return items.slice(0, config.limit || 20);
     } catch (error) {
       console.error('RSS 解析失败:', error);
       return [];
@@ -127,7 +127,7 @@ export class RSSDataSource extends BaseDataSource {
 
   private isValidItem(item: any, config: RSSConfig): boolean {
     const content = this.extractContent(item);
-    if (content.length < (config.minContentLength || 100)) {
+    if (content.length < (config.minContentLength || 50)) {
       return false;
     }
 
@@ -142,7 +142,7 @@ export class RSSDataSource extends BaseDataSource {
     const ageHours = (Date.now() - publishedAt.getTime()) / (1000 * 60 * 60);
 
     const heatScore = this.calculateHeatScore({
-      views: 100, // RSS 没有直接的互动数据，使用默认值
+      views: 100,
       ageHours,
     });
 
@@ -181,6 +181,9 @@ export class RSSDataSource extends BaseDataSource {
     if (item.content && item.content[0] && item.content[0]._) {
       return item.content[0]._;
     }
+    if (item.summary && item.summary[0]) {
+      return item.summary[0];
+    }
     return '';
   }
 
@@ -189,10 +192,15 @@ export class RSSDataSource extends BaseDataSource {
       return item.link;
     }
     if (item.link && item.link[0]) {
-      return item.link[0];
+      if (typeof item.link[0] === 'string') {
+        return item.link[0];
+      }
+      if (item.link[0].$.href) {
+        return item.link[0].$.href;
+      }
     }
-    if (item.link && item.link[0] && item.link[0]._) {
-      return item.link[0]._;
+    if (item.guid && item.guid[0]) {
+      return item.guid[0];
     }
     return '';
   }
@@ -204,17 +212,34 @@ export class RSSDataSource extends BaseDataSource {
     if (item.published && item.published[0]) {
       return new Date(item.published[0]);
     }
+    if (item.updated && item.updated[0]) {
+      return new Date(item.updated[0]);
+    }
     return new Date();
   }
 
-  private matchesKeywords(hotspot: SourceHotspot, keywords?: string[]): boolean {
-    if (!keywords || keywords.length === 0) {
-      return true;
-    }
+  private isValidContent(hotspot: SourceHotspot): boolean {
+    return hotspot.title.length > 0 && hotspot.content.length > 0;
+  }
 
-    const searchText = `${hotspot.title} ${hotspot.content || ''}`.toLowerCase();
-    return keywords.some(keyword => 
-      searchText.includes(keyword.toLowerCase())
-    );
+  private matchesKeywords(hotspot: SourceHotspot, keywords: string[]): boolean {
+    const titleLower = hotspot.title.toLowerCase();
+    const contentLower = hotspot.content.toLowerCase();
+    
+    return keywords.some(keyword => {
+      const keywordLower = keyword.toLowerCase();
+      return titleLower.includes(keywordLower) || contentLower.includes(keywordLower);
+    });
+  }
+
+  private calculateHeatScore(data: { views: number; ageHours: number }): number {
+    let score = 30;
+    score += Math.min(data.views / 10, 50);
+    if (data.ageHours < 24) {
+      score += 20;
+    } else if (data.ageHours < 72) {
+      score += 10;
+    }
+    return Math.min(Math.round(score), 100);
   }
 }

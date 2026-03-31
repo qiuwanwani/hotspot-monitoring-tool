@@ -23,13 +23,18 @@ export class PushService {
     const publicKey = process.env.VAPID_PUBLIC_KEY;
     const privateKey = process.env.VAPID_PRIVATE_KEY;
 
-    if (publicKey && privateKey) {
-      webpush.setVapidDetails(
-        'mailto:contact@example.com',
-        publicKey,
-        privateKey
-      );
-      this.initialized = true;
+    if (publicKey && privateKey && publicKey !== 'your-vapid-public-key' && privateKey !== 'your-vapid-private-key') {
+      try {
+        webpush.setVapidDetails(
+          'mailto:contact@example.com',
+          publicKey,
+          privateKey
+        );
+        this.initialized = true;
+      } catch (error) {
+        console.warn('VAPID 密钥配置错误，Web Push 已禁用:', error);
+        this.initialized = false;
+      }
     }
   }
 
