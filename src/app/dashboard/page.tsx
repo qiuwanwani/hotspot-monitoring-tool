@@ -17,6 +17,41 @@ import {
   Sparkles
 } from 'lucide-react';
 
+// 骨架屏组件
+const SkeletonCard = () => (
+  <div className="p-6 rounded-2xl bg-card animate-pulse">
+    <div className="flex items-center gap-4">
+      <div className="w-12 h-12 rounded-xl bg-background-tertiary" />
+      <div className="flex-1 space-y-2">
+        <div className="h-4 w-24 bg-background-tertiary rounded" />
+        <div className="h-6 w-16 bg-background-tertiary rounded" />
+      </div>
+    </div>
+  </div>
+);
+
+const SkeletonHotspot = () => (
+  <div className="p-4 rounded-xl bg-card-hover animate-pulse">
+    <div className="flex items-start gap-3">
+      <div className="w-10 h-10 rounded-lg bg-background-tertiary flex-shrink-0" />
+      <div className="flex-1 space-y-2">
+        <div className="h-4 w-3/4 bg-background-tertiary rounded" />
+        <div className="h-3 w-1/2 bg-background-tertiary rounded" />
+      </div>
+    </div>
+  </div>
+);
+
+const SkeletonKeyword = () => (
+  <div className="flex items-center justify-between p-3 rounded-lg bg-background-tertiary/50 animate-pulse">
+    <div className="flex items-center gap-3">
+      <div className="w-2 h-2 rounded-full bg-background-tertiary" />
+      <div className="h-4 w-20 bg-background-tertiary rounded" />
+    </div>
+    <div className="h-5 w-12 bg-background-tertiary rounded" />
+  </div>
+);
+
 // 优化的时间格式化函数
 const formatTime = (dateString: string | null) => {
   if (!dateString) return '从未';
@@ -64,6 +99,7 @@ export default function DashboardPage() {
   const [hotspots, setHotspots] = useState<Hotspot[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [dataLoaded, setDataLoaded] = useState({ keywords: false, hotspots: false });
 
   useEffect(() => {
     fetchData();
@@ -73,14 +109,37 @@ export default function DashboardPage() {
     try {
       setLoading(true);
       setError(null);
+      setDataLoaded({ keywords: false, hotspots: false });
       console.log('开始获取数据...');
-      const [keywordsData, hotspotsData] = await Promise.all([
+      
+      // 使用 Promise.allSettled 确保即使一个请求失败，另一个也能完成
+      const [keywordsResult, hotspotsResult] = await Promise.allSettled([
         api.getKeywords(),
         api.getHotspots({ limit: 5 })
       ]);
-      console.log('获取数据成功:', { keywordsCount: keywordsData.length, hotspotsCount: hotspotsData.data.length });
-      setKeywords(keywordsData);
-      setHotspots(hotspotsData.data);
+      
+      // 处理关键词数据
+      if (keywordsResult.status === 'fulfilled') {
+        console.log('获取关键词成功:', keywordsResult.value.length);
+        setKeywords(keywordsResult.value);
+        setDataLoaded(prev => ({ ...prev, keywords: true }));
+      } else {
+        console.error('获取关键词失败:', keywordsResult.reason);
+      }
+      
+      // 处理热点数据
+      if (hotspotsResult.status === 'fulfilled') {
+        console.log('获取热点成功:', hotspotsResult.value.data.length);
+        setHotspots(hotspotsResult.value.data);
+        setDataLoaded(prev => ({ ...prev, hotspots: true }));
+      } else {
+        console.error('获取热点失败:', hotspotsResult.reason);
+      }
+      
+      // 如果两个请求都失败，显示错误
+      if (keywordsResult.status === 'rejected' && hotspotsResult.status === 'rejected') {
+        setError('获取数据失败，请稍后重试');
+      }
     } catch (error) {
       console.error('获取数据失败:', error);
       console.error('错误类型:', typeof error);
@@ -121,10 +180,83 @@ export default function DashboardPage() {
         title="仪表盘"
         subtitle="实时监控热点动态"
       >
-        <div className="flex items-center justify-center h-64">
-          <div className="flex flex-col items-center gap-4">
-            <div className="w-12 h-12 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-            <p className="text-foreground-muted">加载中...</p>
+        <div className="space-y-8 animate-fade-in">
+          {/* 统计卡片骨架屏 */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <SkeletonCard />
+            <SkeletonCard />
+            <SkeletonCard />
+            <SkeletonCard />
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* 热点列表骨架屏 */}
+            <div className="lg:col-span-2">
+              <Card className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-accent-orange/10">
+                      <Flame size={20} className="text-accent-orange" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-foreground">最新热点</h3>
+                      <p className="text-sm text-foreground-muted">实时热门内容</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <SkeletonHotspot />
+                  <SkeletonHotspot />
+                  <SkeletonHotspot />
+                  <SkeletonHotspot />
+                  <SkeletonHotspot />
+                </div>
+              </Card>
+            </div>
+
+            {/* 关键词和状态骨架屏 */}
+            <div className="space-y-6">
+              <Card className="p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 rounded-lg bg-primary/10">
+                    <Search size={20} className="text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-foreground">关键词</h3>
+                    <p className="text-sm text-foreground-muted">监控列表</p>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <SkeletonKeyword />
+                  <SkeletonKeyword />
+                  <SkeletonKeyword />
+                  <SkeletonKeyword />
+                  <SkeletonKeyword />
+                </div>
+              </Card>
+
+              <Card className="p-6 glow-border">
+                <div className="text-center">
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-accent-green/10 text-accent-green text-sm font-medium mb-4">
+                    <PulsingDot />
+                    系统启动中
+                  </div>
+                  <h3 className="text-lg font-semibold text-foreground mb-4">
+                    正在 <AnimatedGradientText>加载数据</AnimatedGradientText>
+                  </h3>
+                  <div className="space-y-3 text-sm text-left">
+                    <div className="flex items-center justify-between">
+                      <span className="text-foreground-muted">系统状态</span>
+                      <span className="text-accent-green font-medium">运行中</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-foreground-muted">数据加载</span>
+                      <span className="text-foreground">请稍候...</span>
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            </div>
           </div>
         </div>
       </MainLayout>
@@ -163,13 +295,30 @@ export default function DashboardPage() {
       title="仪表盘"
       subtitle="实时监控热点动态"
       actions={
-        <Button 
-          variant="primary"
-          icon={<Sparkles size={16} />}
-          onClick={() => window.location.href = '/keywords'}
-        >
-          添加关键词
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button 
+            variant="ghost"
+            icon={<Bell size={16} />}
+            className="relative"
+            onClick={() => window.location.href = '/notifications'}
+          >
+            {totalNotifications > 0 && (
+              <Badge 
+                variant="danger" 
+                className="absolute -top-1 -right-1 w-4 h-4 flex items-center justify-center p-0"
+              >
+                {totalNotifications}
+              </Badge>
+            )}
+          </Button>
+          <Button 
+            variant="primary"
+            icon={<Sparkles size={16} />}
+            onClick={() => window.location.href = '/keywords'}
+          >
+            添加关键词
+          </Button>
+        </div>
       }
     >
       <div className="space-y-8 animate-fade-in">

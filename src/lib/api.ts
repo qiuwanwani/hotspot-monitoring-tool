@@ -81,17 +81,26 @@ export interface PaginatedResponse<T> {
 class ApiClient {
   private async request<T>(
     endpoint: string,
-    options?: RequestInit
+    options?: RequestInit,
+    timeout: number = 10000
   ): Promise<T> {
     try {
       console.log('API请求开始:', `${API_BASE}${endpoint}`);
+      
+      // 创建 AbortController 用于超时控制
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
+      
       const response = await fetch(`${API_BASE}${endpoint}`, {
         headers: {
           'Content-Type': 'application/json',
           ...options?.headers,
         },
+        signal: controller.signal,
         ...options,
       });
+      
+      clearTimeout(timeoutId);
 
       console.log('API请求响应:', response.status, response.statusText);
 
@@ -105,6 +114,10 @@ class ApiClient {
       console.log('API请求成功:', data);
       return data;
     } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.error('API请求超时:', endpoint);
+        throw new Error('请求超时，请稍后重试');
+      }
       console.error('API请求异常:', error);
       throw error;
     }
