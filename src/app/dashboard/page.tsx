@@ -7,6 +7,7 @@ import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import { PulsingDot, AnimatedGradientText } from '@/components/ui/Motion';
 import { api, Keyword, Hotspot } from '@/lib/api';
+import { HotspotTrendChart, SourceDistributionChart, HeatLevelChart } from '@/components/charts';
 import { 
   TrendingUp, 
   Search, 
@@ -14,7 +15,10 @@ import {
   Flame,
   ArrowRight,
   Clock,
-  Sparkles
+  Sparkles,
+  BarChart3,
+  PieChart,
+  Activity
 } from 'lucide-react';
 
 // 骨架屏组件
@@ -356,6 +360,50 @@ export default function DashboardPage() {
             trend="up"
           />
         </div>
+
+        {/* 数据可视化图表 - 仅在有数据时显示 */}
+        {hotspots.length > 0 && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <Card className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 rounded-lg bg-primary/10">
+                  <Activity size={20} className="text-primary" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-foreground">热点趋势</h3>
+                  <p className="text-sm text-foreground-muted">近7天热点数量和平均热度</p>
+                </div>
+              </div>
+              <HotspotTrendChart hotspots={hotspots} days={7} />
+            </Card>
+
+            <Card className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 rounded-lg bg-accent-orange/10">
+                  <PieChart size={20} className="text-accent-orange" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-foreground">来源分布</h3>
+                  <p className="text-sm text-foreground-muted">各数据源占比</p>
+                </div>
+              </div>
+              <SourceDistributionChart hotspots={hotspots} />
+            </Card>
+
+            <Card className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 rounded-lg bg-accent-green/10">
+                  <BarChart3 size={20} className="text-accent-green" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-foreground">热度分布</h3>
+                  <p className="text-sm text-foreground-muted">热点热度等级统计</p>
+                </div>
+              </div>
+              <HeatLevelChart hotspots={hotspots} />
+            </Card>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">

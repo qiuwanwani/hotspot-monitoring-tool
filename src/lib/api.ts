@@ -33,7 +33,9 @@ export interface Hotspot {
   publishedAt: string | null;
   createdAt: string;
   updatedAt: string;
-  keywords?: { keyword: string; category: string | null }[];
+  keywords?: { id: string; keyword: string; category: string | null }[];
+  heatHistory?: { heatScore: number; recordedAt: string }[];
+  _count?: { favorites: number };
 }
 
 export interface Notification {
@@ -169,13 +171,29 @@ class ApiClient {
     source?: string;
     category?: string;
     minHeat?: number;
+    maxHeat?: number;
+    sortBy?: 'heatScore' | 'publishedAt' | 'createdAt';
+    sortOrder?: 'asc' | 'desc';
+    timeRange?: '1h' | '24h' | '7d' | '30d';
+    isVerified?: boolean;
+    isFake?: boolean;
+    hasSummary?: boolean;
+    keywordId?: string;
   }): Promise<PaginatedResponse<Hotspot>> {
     const searchParams = new URLSearchParams();
     if (params?.page) searchParams.set('page', params.page.toString());
     if (params?.limit) searchParams.set('limit', params.limit.toString());
     if (params?.source) searchParams.set('source', params.source);
     if (params?.category) searchParams.set('category', params.category);
-    if (params?.minHeat) searchParams.set('minHeat', params.minHeat.toString());
+    if (params?.minHeat !== undefined) searchParams.set('minHeat', params.minHeat.toString());
+    if (params?.maxHeat !== undefined) searchParams.set('maxHeat', params.maxHeat.toString());
+    if (params?.sortBy) searchParams.set('sortBy', params.sortBy);
+    if (params?.sortOrder) searchParams.set('sortOrder', params.sortOrder);
+    if (params?.timeRange) searchParams.set('timeRange', params.timeRange);
+    if (params?.isVerified !== undefined) searchParams.set('isVerified', params.isVerified.toString());
+    if (params?.isFake !== undefined) searchParams.set('isFake', params.isFake.toString());
+    if (params?.hasSummary !== undefined) searchParams.set('hasSummary', params.hasSummary.toString());
+    if (params?.keywordId) searchParams.set('keywordId', params.keywordId);
 
     const query = searchParams.toString();
     return this.request<PaginatedResponse<Hotspot>>(
@@ -216,6 +234,24 @@ class ApiClient {
   async markAllNotificationsRead(): Promise<{ success: boolean }> {
     return this.request<{ success: boolean }>('/notifications/read-all', {
       method: 'PUT',
+    });
+  }
+
+  // 收藏相关
+  async getFavorites(): Promise<any[]> {
+    return this.request<any[]>('/favorites');
+  }
+
+  async addFavorite(hotspotId: string): Promise<any> {
+    return this.request<any>('/favorites', {
+      method: 'POST',
+      body: JSON.stringify({ hotspotId }),
+    });
+  }
+
+  async deleteFavorite(hotspotId: string): Promise<any> {
+    return this.request<any>(`/favorites?hotspotId=${hotspotId}`, {
+      method: 'DELETE',
     });
   }
 }

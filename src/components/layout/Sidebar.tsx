@@ -9,7 +9,9 @@ import {
   TrendingUp, 
   Bell, 
   Settings,
-  Zap
+  Zap,
+  X,
+  Activity
 } from 'lucide-react';
 
 interface NavItemProps {
@@ -17,15 +19,17 @@ interface NavItemProps {
   label: string;
   href: string;
   badge?: number;
+  onClick?: () => void;
 }
 
-function NavItem({ icon, label, href, badge }: NavItemProps) {
+function NavItem({ icon, label, href, badge, onClick }: NavItemProps) {
   const pathname = usePathname();
   const active = pathname === href || pathname.startsWith(href + '/');
 
   return (
     <Link
       href={href}
+      onClick={onClick}
       className={`
         group relative flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200
         ${active 
@@ -56,19 +60,24 @@ function NavItem({ icon, label, href, badge }: NavItemProps) {
   );
 }
 
-export default function Sidebar() {
+interface SidebarProps {
+  onClose?: () => void;
+}
+
+export default function Sidebar({ onClose }: SidebarProps) {
   const navItems = [
     { icon: <Flame size={20} />, label: '仪表盘', href: '/dashboard' },
     { icon: <Search size={20} />, label: '关键词', href: '/keywords' },
     { icon: <TrendingUp size={20} />, label: '热点', href: '/hotspots' },
     { icon: <Bell size={20} />, label: '通知', href: '/notifications' },
+    { icon: <Activity size={20} />, label: '监控中心', href: '/monitor' },
     { icon: <Settings size={20} />, label: '设置', href: '/settings' },
   ];
 
   return (
-    <aside className="fixed left-0 top-0 bottom-0 w-64 bg-background-secondary border-r border-border flex flex-col z-40">
-      <div className="p-6">
-        <Link href="/dashboard" className="flex items-center gap-3 group">
+    <div className="w-full h-full flex flex-col">
+      <div className="p-6 flex items-center justify-between">
+        <Link href="/dashboard" className="flex items-center gap-3 group" onClick={onClose}>
           <div className="relative">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
               <Zap size={20} className="text-white" />
@@ -80,11 +89,21 @@ export default function Sidebar() {
             <p className="text-xs text-foreground-muted">Hotspot Monitor</p>
           </div>
         </Link>
+        
+        {/* 移动端关闭按钮 */}
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="lg:hidden p-2 rounded-lg hover:bg-card transition-colors"
+          >
+            <X size={20} className="text-foreground-muted" />
+          </button>
+        )}
       </div>
 
       <nav className="flex-1 px-3 py-4 space-y-1">
         {navItems.map((item) => (
-          <NavItem key={item.href} {...item} />
+          <NavItem key={item.href} {...item} onClick={onClose} />
         ))}
       </nav>
 
@@ -97,6 +116,6 @@ export default function Sidebar() {
           <p className="text-sm text-foreground">所有系统运行正常</p>
         </div>
       </div>
-    </aside>
+    </div>
   );
 }

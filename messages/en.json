@@ -1,0 +1,147 @@
+{
+  "metadata": {
+    "title": "Hotspot Monitor",
+    "description": "Automatically discover and monitor trending topics with instant notifications"
+  },
+  "navigation": {
+    "dashboard": "Dashboard",
+    "keywords": "Keywords",
+    "hotspots": "Hotspots",
+    "notifications": "Notifications",
+    "settings": "Settings"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "subtitle": "Real-time trending topics monitoring",
+    "stats": {
+      "activeKeywords": "Active Keywords",
+      "totalHotspots": "Total Hotspots",
+      "notifications": "Notifications",
+      "averageHeat": "Avg Heat"
+    },
+    "charts": {
+      "trend": "Trending Trend",
+      "trendSubtitle": "Hotspots count & avg heat in last 7 days",
+      "sourceDistribution": "Source Distribution",
+      "sourceDistributionSubtitle": "Distribution by data source",
+      "heatDistribution": "Heat Distribution",
+      "heatDistributionSubtitle": "Hotspots by heat level"
+    },
+    "latestHotspots": "Latest Hotspots",
+    "latestHotspotsSubtitle": "Real-time trending content",
+    "viewAll": "View All",
+    "keywords": "Keywords",
+    "keywordsSubtitle": "Monitoring list",
+    "viewAllKeywords": "View all keywords",
+    "systemStatus": "System Status",
+    "systemRunning": "System Running",
+    "monitorService": "Monitor Service",
+    "active": "Active",
+    "lastUpdate": "Last Update",
+    "dataSources": "Data Sources"
+  },
+  "hotspots": {
+    "title": "Hotspots",
+    "subtitle": "Discover trending content across platforms",
+    "search": "Search hotspots...",
+    "sort": {
+      "label": "Sort",
+      "createdAt": "Latest Discovered",
+      "publishedAt": "Latest Published",
+      "heatScore": "Heat Score"
+    },
+    "filter": {
+      "title": "Filters",
+      "reset": "Reset Filters",
+      "timeRange": "Time Range",
+      "heatLevel": "Heat Level",
+      "verificationStatus": "Status",
+      "hasSummary": "Has AI Summary",
+      "hasKeyword": "Matches Keyword"
+    },
+    "timeRange": {
+      "all": "All Time",
+      "1h": "Last Hour",
+      "24h": "Last 24 Hours",
+      "7d": "Last 7 Days",
+      "30d": "Last 30 Days"
+    },
+    "heatLevel": {
+      "all": "All Levels",
+      "hot": "Hot (80-100)",
+      "warm": "Warm (60-79)",
+      "rising": "Rising (40-59)",
+      "new": "New (0-39)"
+    },
+    "verification": {
+      "all": "All",
+      "verified": "Verified",
+      "fake": "Suspicious",
+      "pending": "Pending"
+    },
+    "noHotspots": "No Hotspots",
+    "noHotspotsDescription": "Hotspots will appear here",
+    "addKeywordsPrompt": "Add keywords to start monitoring"
+  },
+  "keywords": {
+    "title": "Keywords",
+    "subtitle": "Manage monitoring keywords",
+    "add": "Add Keyword",
+    "edit": "Edit",
+    "delete": "Delete",
+    "active": "Active",
+    "paused": "Paused",
+    "noKeywords": "No Keywords",
+    "noKeywordsDescription": "Add keywords to start monitoring"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "subtitle": "View system notifications",
+    "markAsRead": "Mark as Read",
+    "markAllAsRead": "Mark All as Read",
+    "noNotifications": "No Notifications",
+    "noNotificationsDescription": "You'll receive notifications when hotspots are found"
+  },
+  "settings": {
+    "title": "Settings",
+    "subtitle": "Configure system parameters",
+    "save": "Save Settings",
+    "saved": "Settings Saved",
+    "sections": {
+      "notifications": "Notifications",
+      "ai": "AI Integration",
+      "email": "Email Service"
+    }
+  },
+  "common": {
+    "loading": "Loading...",
+    "error": "Error",
+    "retry": "Retry",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "add": "Add",
+    "search": "Search",
+    "filter": "Filter",
+    "sort": "Sort",
+    "close": "Close",
+    "back": "Back",
+    "next": "Next",
+    "previous": "Previous",
+    "submit": "Submit",
+    "success": "Success",
+    "failed": "Failed",
+    "all": "All",
+    "none": "None",
+    "more": "More",
+    "less": "Less",
+    "show": "Show",
+    "hide": "Hide",
+    "enable": "Enable",
+    "disable": "Disable",
+    "on": "On",
+    "off": "Off"
+  }
+}

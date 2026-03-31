@@ -7,6 +7,26 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  password  String   // 加密存储
+  role      String   @default("user") // admin, user
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  keywords      Keyword[]
+  hotspots      Hotspot[]
+  notifications Notification[]
+  settings      UserSettings?
+  favorites     Favorite[]
+
+  @@index([email])
+  @@index([role])
+}
+
 model Keyword {
   id              String   @id @default(cuid())
   keyword         String
@@ -19,9 +39,13 @@ model Keyword {
   updatedAt       DateTime @updatedAt
   hotspots        Hotspot[]
   notifications   Notification[]
+  
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
 
   @@index([keyword])
   @@index([isActive])
+  @@index([userId])
 }
 
 model Hotspot {
@@ -45,11 +69,49 @@ model Hotspot {
   notifications   Notification[]
   dataSourceId    String?
   dataSource      DataSource? @relation(fields: [dataSourceId], references: [id])
+  
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  
+  // 收藏功能
+  favorites       Favorite[]
+  
+  // 热度历史记录
+  heatHistory     HeatHistory[]
 
   @@index([source])
   @@index([category])
   @@index([heatScore])
   @@index([createdAt])
+  @@index([userId])
+}
+
+// 收藏表
+model Favorite {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  hotspotId String
+  hotspot   Hotspot  @relation(fields: [hotspotId], references: [id])
+
+  @@unique([userId, hotspotId])
+  @@index([userId])
+  @@index([hotspotId])
+}
+
+// 热度历史记录
+model HeatHistory {
+  id        String   @id @default(cuid())
+  heatScore Int
+  recordedAt DateTime @default(now())
+  
+  hotspotId String
+  hotspot   Hotspot  @relation(fields: [hotspotId], references: [id])
+
+  @@index([hotspotId])
+  @@index([recordedAt])
 }
 
 model Notification {
@@ -64,10 +126,14 @@ model Notification {
   hotspotId String
   keyword   Keyword? @relation(fields: [keywordId], references: [id])
   keywordId String?
+  
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
 
   @@index([status])
   @@index([isRead])
   @@index([createdAt])
+  @@index([userId])
 }
 
 model UserSettings {
@@ -88,6 +154,9 @@ model UserSettings {
   smtpPass          String?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
+  
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id])
 }
 
 model DataSource {
@@ -102,7 +171,43 @@ model DataSource {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   hotspots    Hotspot[]
+  health      DataSourceHealth?
 
   @@index([type])
   @@index([isActive])
+}
+
+// 监控日志
+model MonitorLog {
+  id          String   @id @default(cuid())
+  level       String   // info, warn, error
+  message     String
+  context     String?  // 上下文信息，如数据源名称
+  metadata    String?  // JSON格式的额外数据
+  createdAt   DateTime @default(now())
+
+  @@index([level])
+  @@index([createdAt])
+  @@index([context])
+}
+
+// 数据源健康状态
+model DataSourceHealth {
+  id            String   @id @default(cuid())
+  dataSourceId  String   @unique
+  status        String   // healthy, warning, error
+  lastCheckAt   DateTime @default(now())
+  lastSuccessAt DateTime?
+  lastErrorAt   DateTime?
+  lastError     String?
+  successCount  Int      @default(0)
+  errorCount    Int      @default(0)
+  avgResponseTime Int    @default(0) // 毫秒
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  dataSource    DataSource @relation(fields: [dataSourceId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([lastCheckAt])
 }

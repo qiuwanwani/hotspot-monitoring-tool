@@ -5,9 +5,23 @@ import { aiService } from './ai';
 import { notificationService } from './notification';
 import { logger } from './logger';
 
+interface HotspotWithKeywords {
+  hotspot: {
+    id: string;
+    title: string;
+    content: string | null;
+    source: string;
+    sourceUrl: string | null;
+    heatScore: number;
+    keywordsMatched: string | null;
+  };
+  matchedKeywords: Array<{ id: string; keyword: string }>;
+}
+
 export class MonitorService {
   private jobs: Map<string, cron.ScheduledTask> = new Map();
   private initialized = false;
+  private isFetching = false;
 
   async start() {
     logger.info('热点监控服务启动...', 'MonitorService');
@@ -18,9 +32,11 @@ export class MonitorService {
       
       this.scheduleDataFetch();
       this.scheduleCleanup();
+      this.scheduleHealthCheck();
       logger.info('热点监控服务启动成功', 'MonitorService');
     } catch (error) {
       logger.error('热点监控服务启动失败', 'MonitorService', error as Error);
+      throw error;
     }
   }
 
@@ -31,11 +47,16 @@ export class MonitorService {
       logger.info(`停止任务: ${name}`, 'MonitorService');
     });
     this.jobs.clear();
+    dataSourceManager.cancelFetch();
     logger.info('热点监控服务已停止', 'MonitorService');
   }
 
   private scheduleDataFetch() {
     const job = cron.schedule('*/5 * * * *', async () => {
+      if (this.isFetching) {
+        logger.warn('上一次数据获取仍在进行中，跳过本次任务', 'MonitorService');
+        return;
+      }
       await this.fetchData();
     });
 
@@ -52,9 +73,17 @@ export class MonitorService {
     logger.info('启动任务: 数据清理 (每天凌晨)', 'MonitorService');
   }
 
+  private scheduleHealthCheck() {
+    const job = cron.schedule('*/10 * * * *', async () => {
+      await this.healthCheck();
+    });
+
+    this.jobs.set('health-check', job);
+    logger.info('启动任务: 健康检查 (每10分钟)', 'MonitorService');
+  }
+
   async fetchNow() {
     if (!this.initialized) {
-      // 同步初始化监控服务，确保数据获取能够执行
       await this.start();
     }
     await this.fetchData();
@@ -66,6 +95,12 @@ export class MonitorService {
       return;
     }
 
+    if (this.isFetching) {
+      logger.warn('数据获取正在进行中，跳过本次请求', 'MonitorService');
+      return;
+    }
+
+    this.isFetching = true;
     let keywordStrings: string[] = [];
     
     try {
@@ -75,14 +110,14 @@ export class MonitorService {
         where: { isActive: true },
       });
 
-      logger.info(`找到 ${keywords.length} 个活跃关键词: ${keywords.map(k => k.keyword).join(', ')}`, 'MonitorService');
+      logger.info(`找到 ${keywords.length} 个活跃关键词`, 'MonitorService');
       
       keywordStrings = keywords.map(k => k.keyword);
       
       // 如果没有活跃关键词，使用默认关键词
       if (keywordStrings.length === 0) {
         keywordStrings = ['科技', 'AI', '互联网', '创业', '投资'];
-        logger.info(`没有活跃关键词，使用默认关键词: ${keywordStrings.join(', ')}`, 'MonitorService');
+        logger.info(`没有活跃关键词，使用默认关键词`, 'MonitorService');
       }
       
       const hotspots = await dataSourceManager.fetchAll(keywordStrings);
@@ -91,123 +126,100 @@ export class MonitorService {
 
       let saved = 0;
       let skipped = 0;
+      
       if (hotspots.length > 0) {
-        // 批量检查热点是否存在
-        const existingHotspots = await this.checkExistingHotspots(hotspots);
-        const existingUrls = new Set(existingHotspots.map(h => h.sourceUrl));
-        const existingSourceIds = new Set(existingHotspots.map(h => `${h.sourceId}_${h.source}`));
-        
-        // 批量处理热点
-        const hotspotsToSave = hotspots.filter(hotspot => {
-          const urlKey = hotspot.sourceUrl;
-          const sourceKey = `${hotspot.sourceId}_${hotspot.source}`;
-          return !existingUrls.has(urlKey) && !existingSourceIds.has(sourceKey);
+        // 使用事务批量处理
+        const result = await prisma.$transaction(async (tx) => {
+          // 批量检查热点是否存在
+          const sourceUrls = hotspots.map(h => h.sourceUrl);
+          const existingHotspots = await tx.hotspot.findMany({
+            where: {
+              sourceUrl: { in: sourceUrls },
+            },
+            select: { sourceUrl: true },
+          });
+          
+          const existingUrls = new Set(existingHotspots.map(h => h.sourceUrl));
+          
+          // 过滤需要保存的热点
+          const hotspotsToSave = hotspots.filter(hotspot => !existingUrls.has(hotspot.sourceUrl));
+          
+          logger.info(`过滤后需要保存 ${hotspotsToSave.length} 条热点`, 'MonitorService');
+          
+          // 批量创建热点
+          if (hotspotsToSave.length > 0) {
+            const createdHotspots: HotspotWithKeywords[] = [];
+            
+            for (const hotspot of hotspotsToSave) {
+              try {
+                const matchedKeywords = keywords.filter(k => 
+                  hotspot.title.toLowerCase().includes(k.keyword.toLowerCase()) ||
+                  (hotspot.content && hotspot.content.toLowerCase().includes(k.keyword.toLowerCase()))
+                );
+
+                const createdHotspot = await tx.hotspot.create({
+                  data: {
+                    title: hotspot.title,
+                    content: hotspot.content,
+                    source: hotspot.source,
+                    sourceUrl: hotspot.sourceUrl,
+                    sourceId: hotspot.sourceId,
+                    category: hotspot.category,
+                    heatScore: hotspot.heatScore,
+                    keywordsMatched: matchedKeywords.map(k => k.keyword).join(','),
+                    publishedAt: hotspot.publishedAt,
+                  },
+                });
+
+                createdHotspots.push({ hotspot: createdHotspot, matchedKeywords });
+              } catch (error) {
+                logger.error(`保存热点失败: ${hotspot.title}`, 'MonitorService', error as Error);
+              }
+            }
+            
+            // 处理关键词关联和通知（在事务外异步处理）
+            this.processKeywordAssociations(createdHotspots).catch(error => {
+              logger.error('处理关键词关联失败', 'MonitorService', error as Error);
+            });
+            
+            return { saved: createdHotspots.length, skipped: hotspots.length - createdHotspots.length };
+          }
+          
+          return { saved: 0, skipped: hotspots.length };
+        }, {
+          timeout: 60000, // 60秒超时
         });
-        
-        logger.info(`过滤后需要保存 ${hotspotsToSave.length} 条热点`, 'MonitorService');
-        
-        // 批量创建热点
-        if (hotspotsToSave.length > 0) {
-          saved = await this.batchSaveHotspots(hotspotsToSave, keywords);
-          skipped = hotspots.length - saved;
-        } else {
-          skipped = hotspots.length;
-        }
-      } else {
-        // 如果没有获取到热点数据，手动添加一些默认热点数据
-        logger.info('没有获取到热点数据，手动添加默认热点数据', 'MonitorService');
-        saved = await this.addDefaultHotspots(keywordStrings);
+
+        saved = result.saved;
+        skipped = result.skipped;
       }
 
       logger.info(`数据获取完成: 保存 ${saved} 条，跳过 ${skipped} 条`, 'MonitorService');
     } catch (error) {
       logger.error('数据获取失败', 'MonitorService', error as Error);
       
-      // 如果没有活跃关键词，使用默认关键词
-      if (keywordStrings.length === 0) {
-        keywordStrings = ['科技', 'AI', '互联网', '创业', '投资'];
-        logger.info(`没有活跃关键词，使用默认关键词: ${keywordStrings.join(', ')}`, 'MonitorService');
-      }
-      
-      // 如果数据获取失败，手动添加一些默认热点数据
-      logger.info('数据获取失败，手动添加默认热点数据', 'MonitorService');
-      const saved = await this.addDefaultHotspots(keywordStrings);
-      
-      logger.info(`默认热点数据添加完成: 保存 ${saved} 条`, 'MonitorService');
-    }
-  }
-
-  private async checkExistingHotspots(hotspots: SourceHotspot[]): Promise<any[]> {
-    if (hotspots.length === 0) return [];
-    
-    const sourceUrls = hotspots.map(h => h.sourceUrl);
-    const sourceIdSourcePairs = hotspots.map(h => `${h.sourceId}_${h.source}`);
-    
-    return await prisma.hotspot.findMany({
-      where: {
-        OR: [
-          { sourceUrl: { in: sourceUrls } },
-          ...sourceIdSourcePairs.map(pair => {
-            const [sourceId, source] = pair.split('_');
-            return { sourceId, source };
-          })
-        ]
-      },
-      select: { sourceUrl: true, sourceId: true, source: true }
-    });
-  }
-
-  private async batchSaveHotspots(hotspots: SourceHotspot[], keywords: any[]): Promise<number> {
-    let saved = 0;
-    
-    // 批量创建热点
-    const createdHotspots = [];
-    for (const hotspot of hotspots) {
+      // 添加默认热点数据作为fallback
       try {
-        let matchedKeywords = keywords.filter(k => 
-          hotspot.title.toLowerCase().includes(k.keyword.toLowerCase()) ||
-          (hotspot.content && hotspot.content.toLowerCase().includes(k.keyword.toLowerCase()))
-        );
-
-        logger.debug(`处理热点: ${hotspot.title.substring(0, 40)}...`, 'MonitorService');
-        logger.debug(`匹配到 ${matchedKeywords.length} 个关键词: ${matchedKeywords.map(k => k.keyword).join(', ')}`, 'MonitorService');
-
-        const createdHotspot = await prisma.hotspot.create({
-          data: {
-            title: hotspot.title,
-            content: hotspot.content,
-            source: hotspot.source,
-            sourceUrl: hotspot.sourceUrl,
-            sourceId: hotspot.sourceId,
-            category: hotspot.category,
-            heatScore: hotspot.heatScore,
-            keywordsMatched: matchedKeywords.map(k => k.keyword).join(','),
-            publishedAt: hotspot.publishedAt,
-          },
-        });
-
-        logger.debug(`已保存: ID=${createdHotspot.id}`, 'MonitorService');
-        createdHotspots.push({ hotspot: createdHotspot, matchedKeywords });
-        saved++;
-      } catch (error) {
-        logger.error(`保存热点失败: ${hotspot.title}`, 'MonitorService', error as Error);
+        const saved = await this.addDefaultHotspots(keywordStrings);
+        logger.info(`默认热点数据添加完成: 保存 ${saved} 条`, 'MonitorService');
+      } catch (fallbackError) {
+        logger.error('添加默认热点数据失败', 'MonitorService', fallbackError as Error);
       }
+    } finally {
+      this.isFetching = false;
     }
-    
-    // 批量处理关键词关联和通知
-    await this.batchProcessKeywordAssociations(createdHotspots);
-    
-    return saved;
   }
 
-  private async batchProcessKeywordAssociations(createdHotspots: Array<{ hotspot: any, matchedKeywords: any[] }>) {
-    const updatePromises = [];
-    const notificationPromises = [];
-    
-    // 先获取通知设置，避免重复查询
+  private async processKeywordAssociations(createdHotspots: HotspotWithKeywords[]) {
+    if (createdHotspots.length === 0) return;
+
     const settings = await prisma.userSettings.findFirst();
     const notificationEnabled = settings?.notificationEnabled;
     const email = settings?.email;
+    
+    // 批量处理关键词关联
+    const updatePromises = [];
+    const notificationPromises = [];
     
     for (const { hotspot, matchedKeywords } of createdHotspots) {
       if (matchedKeywords.length > 0) {
@@ -223,7 +235,7 @@ export class MonitorService {
           })
         );
 
-        // 批量发送通知
+        // 批量发送通知（高分热点）
         if (hotspot.heatScore >= 60 && notificationEnabled) {
           for (const keyword of matchedKeywords) {
             notificationPromises.push(
@@ -233,10 +245,12 @@ export class MonitorService {
                 hotspotId: hotspot.id,
                 keyword: keyword.keyword,
                 title: hotspot.title,
-                url: hotspot.sourceUrl,
+                url: hotspot.sourceUrl || '',
                 source: hotspot.source,
                 heatScore: hotspot.heatScore,
                 email: email || undefined,
+              }).catch(error => {
+                logger.error(`发送通知失败: ${hotspot.title}`, 'MonitorService', error as Error);
               })
             );
           }
@@ -244,8 +258,8 @@ export class MonitorService {
       }
     }
     
-    // 并行处理所有操作
-    await Promise.all([...updatePromises, ...notificationPromises]);
+    // 并行执行所有更新操作
+    await Promise.allSettled([...updatePromises, ...notificationPromises]);
   }
 
   private async addDefaultHotspots(keywordStrings: string[]): Promise<number> {
@@ -255,7 +269,7 @@ export class MonitorService {
         content: '小米今日发布了全新旗舰手机，搭载最新骁龙处理器，性能强劲，拍照能力出色。',
         source: '科技日报',
         sourceUrl: 'https://www.stdaily.com/',
-        sourceId: '1',
+        sourceId: 'default_1',
         category: '科技新闻',
         heatScore: 85,
         publishedAt: new Date(),
@@ -265,7 +279,7 @@ export class MonitorService {
         content: '人工智能技术在医疗领域的应用取得重大突破，能够准确诊断多种疾病。',
         source: '新浪科技',
         sourceUrl: 'https://tech.sina.com.cn/',
-        sourceId: '2',
+        sourceId: 'default_2',
         category: '科技新闻',
         heatScore: 80,
         publishedAt: new Date(),
@@ -275,75 +289,102 @@ export class MonitorService {
         content: '互联网巨头今日发布了全新AI助手，功能强大，能够完成多种任务。',
         source: '网易科技',
         sourceUrl: 'https://tech.163.com/',
-        sourceId: '3',
+        sourceId: 'default_3',
         category: '科技新闻',
         heatScore: 75,
-        publishedAt: new Date(),
-      },
-      {
-        title: '创业公司融资热度持续升温',
-        content: '近期创业公司融资热度持续升温，多家公司获得大额融资。',
-        source: '腾讯科技',
-        sourceUrl: 'https://tech.qq.com/',
-        sourceId: '4',
-        category: '创业投资',
-        heatScore: 70,
-        publishedAt: new Date(),
-      },
-      {
-        title: '5G技术在工业领域的应用加速',
-        content: '5G技术在工业领域的应用加速，将带来生产效率的大幅提升。',
-        source: '36氪',
-        sourceUrl: 'https://36kr.com/',
-        sourceId: '5',
-        category: '科技新闻',
-        heatScore: 65,
         publishedAt: new Date(),
       },
     ];
     
     let saved = 0;
-    for (const hotspot of defaultHotspots) {
-      try {
-        const createdHotspot = await prisma.hotspot.create({
-          data: {
-            title: hotspot.title,
-            content: hotspot.content,
-            source: hotspot.source,
-            sourceUrl: hotspot.sourceUrl,
-            sourceId: hotspot.sourceId,
-            category: hotspot.category,
-            heatScore: hotspot.heatScore,
-            keywordsMatched: keywordStrings.join(','),
-            publishedAt: hotspot.publishedAt,
-          },
-        });
-        logger.info(`已保存默认热点: ${hotspot.title}`, 'MonitorService');
-        saved++;
-      } catch (error) {
-        logger.error(`保存默认热点失败: ${hotspot.title}`, 'MonitorService', error as Error);
+    
+    await prisma.$transaction(async (tx) => {
+      for (const hotspot of defaultHotspots) {
+        try {
+          // 检查是否已存在
+          const existing = await tx.hotspot.findFirst({
+            where: { sourceUrl: hotspot.sourceUrl },
+          });
+          
+          if (!existing) {
+            await tx.hotspot.create({
+              data: {
+                ...hotspot,
+                keywordsMatched: keywordStrings.join(','),
+              },
+            });
+            saved++;
+          }
+        } catch (error) {
+          logger.error(`保存默认热点失败: ${hotspot.title}`, 'MonitorService', error as Error);
+        }
       }
-    }
+    });
     
     return saved;
   }
 
-
-
   private async cleanupOldData() {
     try {
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-      const deleted = await prisma.hotspot.deleteMany({
+      // 删除30天前的低热度数据
+      const deletedHotspots = await prisma.hotspot.deleteMany({
         where: {
           createdAt: { lt: thirtyDaysAgo },
           heatScore: { lt: 30 },
         },
       });
 
-      logger.info(`清理完成: 删除 ${deleted.count} 条旧数据`, 'MonitorService');
+      // 删除7天前的监控日志
+      const deletedLogs = await prisma.monitorLog.deleteMany({
+        where: {
+          createdAt: { lt: sevenDaysAgo },
+        },
+      });
+
+      // 删除30天前的通知
+      const deletedNotifications = await prisma.notification.deleteMany({
+        where: {
+          createdAt: { lt: thirtyDaysAgo },
+          isRead: true,
+        },
+      });
+
+      logger.info(`清理完成: 删除 ${deletedHotspots.count} 条热点, ${deletedLogs.count} 条日志, ${deletedNotifications.count} 条通知`, 'MonitorService');
     } catch (error) {
       logger.error('数据清理失败', 'MonitorService', error as Error);
+    }
+  }
+
+  private async healthCheck() {
+    try {
+      // 检查数据源健康状态
+      const dataSources = await prisma.dataSource.findMany({
+        where: { isActive: true },
+      });
+
+      for (const source of dataSources) {
+        const lastFetched = source.lastFetched;
+        const now = new Date();
+        
+        if (lastFetched) {
+          const hoursSinceLastFetch = (now.getTime() - lastFetched.getTime()) / (1000 * 60 * 60);
+          
+          if (hoursSinceLastFetch > 1) {
+            logger.warn(`数据源 ${source.name} 超过1小时未更新`, 'MonitorService');
+          }
+        }
+      }
+
+      // 记录系统状态
+      const hotspotCount = await prisma.hotspot.count();
+      const keywordCount = await prisma.keyword.count({ where: { isActive: true } });
+      
+      logger.info(`系统健康检查: ${hotspotCount} 条热点, ${keywordCount} 个活跃关键词`, 'MonitorService');
+    } catch (error) {
+      logger.error('健康检查失败', 'MonitorService', error as Error);
     }
   }
 
@@ -356,26 +397,34 @@ export class MonitorService {
       throw new Error('热点不存在');
     }
 
-    const analysis = await aiService.analyzeContent(
-      hotspot.title,
-      hotspot.content || ''
-    );
+    try {
+      const [analysis, summary] = await Promise.all([
+        aiService.analyzeContent(hotspot.title, hotspot.content || ''),
+        aiService.generateSummary(hotspot.title, hotspot.content || ''),
+      ]);
 
-    const summary = await aiService.generateSummary(
-      hotspot.title,
-      hotspot.content || ''
-    );
+      await prisma.hotspot.update({
+        where: { id: hotspotId },
+        data: {
+          isFake: analysis.isFake,
+          fakeReason: analysis.reason,
+          summary,
+        },
+      });
 
-    await prisma.hotspot.update({
-      where: { id: hotspotId },
-      data: {
-        isFake: analysis.isFake,
-        fakeReason: analysis.reason,
-        summary,
-      },
-    });
+      return analysis;
+    } catch (error) {
+      logger.error(`分析热点失败: ${hotspotId}`, 'MonitorService', error as Error);
+      throw error;
+    }
+  }
 
-    return analysis;
+  getStatus() {
+    return {
+      initialized: this.initialized,
+      isFetching: this.isFetching,
+      scheduledJobs: Array.from(this.jobs.keys()),
+    };
   }
 }
 

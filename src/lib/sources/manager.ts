@@ -3,12 +3,22 @@ import { BaseDataSource, SourceHotspot } from './base';
 import { RSSDataSource } from './rss';
 import { SearchDataSource } from './search';
 import { WebScraperDataSource } from './web-scraper';
+import { WeiboDataSource } from './weibo';
+import { ZhihuDataSource } from './zhihu';
+import { HackerNewsDataSource } from './hackernews';
+import { RedditDataSource } from './reddit';
+import { TwitterDataSource } from './twitter';
 import { logger } from '../logger';
 
 const DATA_SOURCE_CLASSES: Record<string, new (config?: any) => BaseDataSource> = {
   rss: RSSDataSource,
   search: SearchDataSource,
   'web-scraper': WebScraperDataSource,
+  weibo: WeiboDataSource,
+  zhihu: ZhihuDataSource,
+  hackernews: HackerNewsDataSource,
+  reddit: RedditDataSource,
+  twitter: TwitterDataSource,
 };
 
 const DEFAULT_DATA_SOURCES = [
@@ -36,10 +46,95 @@ const DEFAULT_DATA_SOURCES = [
     weight: 1,
     minScore: 20,
   },
+  {
+    name: '微博热搜',
+    type: 'weibo',
+    config: '{}',
+    isActive: true,
+    weight: 1.5,
+    minScore: 30,
+  },
+  {
+    name: '知乎热榜',
+    type: 'zhihu',
+    config: '{}',
+    isActive: true,
+    weight: 1.5,
+    minScore: 30,
+  },
+  {
+    name: 'HackerNews',
+    type: 'hackernews',
+    config: '{}',
+    isActive: true,
+    weight: 1.2,
+    minScore: 25,
+  },
+];
+
+// 请求超时配置
+const FETCH_TIMEOUT = 30000; // 30秒超时
+const DEFAULT_HOTSPOTS: SourceHotspot[] = [
+  {
+    title: '小米发布全新旗舰手机，搭载最新骁龙处理器',
+    content: '小米今日发布了全新旗舰手机，搭载最新骁龙处理器，性能强劲，拍照能力出色。',
+    source: '科技日报',
+    sourceUrl: 'https://www.stdaily.com/',
+    sourceId: 'default_1',
+    category: '科技新闻',
+    heatScore: 85,
+    publishedAt: new Date(),
+    metadata: {},
+  },
+  {
+    title: 'AI技术在医疗领域的应用取得重大突破',
+    content: '人工智能技术在医疗领域的应用取得重大突破，能够准确诊断多种疾病。',
+    source: '新浪科技',
+    sourceUrl: 'https://tech.sina.com.cn/',
+    sourceId: 'default_2',
+    category: '科技新闻',
+    heatScore: 80,
+    publishedAt: new Date(),
+    metadata: {},
+  },
+  {
+    title: '互联网巨头发布全新AI助手',
+    content: '互联网巨头今日发布了全新AI助手，功能强大，能够完成多种任务。',
+    source: '网易科技',
+    sourceUrl: 'https://tech.163.com/',
+    sourceId: 'default_3',
+    category: '科技新闻',
+    heatScore: 75,
+    publishedAt: new Date(),
+    metadata: {},
+  },
+  {
+    title: '创业公司融资热度持续升温',
+    content: '近期创业公司融资热度持续升温，多家公司获得大额融资。',
+    source: '腾讯科技',
+    sourceUrl: 'https://tech.qq.com/',
+    sourceId: 'default_4',
+    category: '创业投资',
+    heatScore: 70,
+    publishedAt: new Date(),
+    metadata: {},
+  },
+  {
+    title: '5G技术在工业领域的应用加速',
+    content: '5G技术在工业领域的应用加速，将带来生产效率的大幅提升。',
+    source: '36氪',
+    sourceUrl: 'https://36kr.com/',
+    sourceId: 'default_5',
+    category: '科技新闻',
+    heatScore: 65,
+    publishedAt: new Date(),
+    metadata: {},
+  },
 ];
 
 export class DataSourceManager {
   private sources: Map<string, BaseDataSource> = new Map();
+  private fetchAbortController: AbortController | null = null;
 
   async initialize() {
     logger.info('初始化数据源管理器...', 'DataSourceManager');
@@ -80,24 +175,49 @@ export class DataSourceManager {
   }
 
   async fetchAll(keywords?: string[]): Promise<SourceHotspot[]> {
+    // 取消之前的请求
+    if (this.fetchAbortController) {
+      this.fetchAbortController.abort();
+    }
+    this.fetchAbortController = new AbortController();
+    const signal = this.fetchAbortController.signal;
+
     const allHotspots: SourceHotspot[] = [];
     const dbSources = await prisma.dataSource.findMany({
       where: { isActive: true },
     });
 
-    // 并行处理所有数据源
-    const sourcePromises = dbSources.map(async (dbSource) => {
+    // 使用 Promise.race 实现超时控制
+    const fetchWithTimeout = async (dbSource: typeof dbSources[0]): Promise<SourceHotspot[]> => {
       const source = this.sources.get(dbSource.id);
       if (!source) return [];
 
+      const startTime = Date.now();
+      let status: 'healthy' | 'warning' | 'error' = 'healthy';
+      let errorMessage: string | undefined;
+
       try {
         logger.info(`从 ${source.name} 获取数据...`, 'DataSourceManager');
-        const hotspots = await source.fetch(keywords);
+        
+        // 创建超时Promise
+        const timeoutPromise = new Promise<SourceHotspot[]>((_, reject) => {
+          setTimeout(() => reject(new Error('请求超时')), FETCH_TIMEOUT);
+        });
+
+        // 创建数据获取Promise
+        const fetchPromise = source.fetch(keywords);
+
+        // 竞争执行
+        const hotspots = await Promise.race([fetchPromise, timeoutPromise]);
+        
+        if (signal.aborted) {
+          return [];
+        }
         
         const filteredHotspots = hotspots.filter(h => h.heatScore >= dbSource.minScore);
         const weightedHotspots = filteredHotspots.map(h => ({
           ...h,
-          heatScore: Math.min(100, h.heatScore * dbSource.weight),
+          heatScore: Math.min(100, Math.round(h.heatScore * dbSource.weight)),
           metadata: {
             ...h.metadata,
             dataSourceId: dbSource.id,
@@ -107,92 +227,116 @@ export class DataSourceManager {
         logger.info(`获取到 ${weightedHotspots.length} 条热点`, 'DataSourceManager');
 
         // 异步更新最后获取时间，不阻塞主线程
-        prisma.dataSource.update({
-          where: { id: dbSource.id },
-          data: { lastFetched: new Date() },
-        }).catch(error => {
+        this.updateLastFetched(dbSource.id).catch(error => {
           logger.error(`更新数据源 ${dbSource.name} 最后获取时间失败`, 'DataSourceManager', error as Error);
+        });
+
+        // 记录健康状态
+        const responseTime = Date.now() - startTime;
+        this.updateHealthStatus(dbSource.id, 'healthy', responseTime).catch(error => {
+          logger.error(`更新数据源 ${dbSource.name} 健康状态失败`, 'DataSourceManager', error as Error);
         });
 
         return weightedHotspots;
       } catch (error) {
-        logger.error(`从 ${dbSource.name} 获取数据失败`, 'DataSourceManager', error as Error);
+        const responseTime = Date.now() - startTime;
+        if (error instanceof Error && error.message === '请求超时') {
+          logger.warn(`从 ${dbSource.name} 获取数据超时`, 'DataSourceManager');
+          status = 'warning';
+          errorMessage = '请求超时';
+        } else {
+          logger.error(`从 ${dbSource.name} 获取数据失败`, 'DataSourceManager', error as Error);
+          status = 'error';
+          errorMessage = error instanceof Error ? error.message : '未知错误';
+        }
+        
+        // 记录健康状态
+        this.updateHealthStatus(dbSource.id, status, responseTime, errorMessage).catch(err => {
+          logger.error(`更新数据源 ${dbSource.name} 健康状态失败`, 'DataSourceManager', err as Error);
+        });
+        
         return [];
       }
-    });
+    };
 
-    // 等待所有数据源处理完成
-    const results = await Promise.all(sourcePromises);
+    // 并行处理所有数据源，但限制并发数
+    const concurrencyLimit = 3;
+    const results: SourceHotspot[][] = [];
     
+    for (let i = 0; i < dbSources.length; i += concurrencyLimit) {
+      const batch = dbSources.slice(i, i + concurrencyLimit);
+      const batchResults = await Promise.all(batch.map(fetchWithTimeout));
+      results.push(...batchResults);
+      
+      if (signal.aborted) {
+        return [];
+      }
+    }
+
     // 合并所有热点数据
     for (const hotspots of results) {
       allHotspots.push(...hotspots);
     }
 
-    // 如果没有获取到热点数据，使用默认的热点数据
+    // 如果没有获取到热点数据，使用默认数据
     if (allHotspots.length === 0) {
-      logger.info(`没有获取到热点数据，使用默认热点数据`, 'DataSourceManager');
-      const defaultHotspots: SourceHotspot[] = [
-        {
-          title: '小米发布全新旗舰手机，搭载最新骁龙处理器',
-          content: '小米今日发布了全新旗舰手机，搭载最新骁龙处理器，性能强劲，拍照能力出色。',
-          source: '科技日报',
-          sourceUrl: 'https://www.stdaily.com/',
-          sourceId: '1',
-          category: '科技新闻',
-          heatScore: 85,
-          publishedAt: new Date(),
-          metadata: {},
-        },
-        {
-          title: 'AI技术在医疗领域的应用取得重大突破',
-          content: '人工智能技术在医疗领域的应用取得重大突破，能够准确诊断多种疾病。',
-          source: '新浪科技',
-          sourceUrl: 'https://tech.sina.com.cn/',
-          sourceId: '2',
-          category: '科技新闻',
-          heatScore: 80,
-          publishedAt: new Date(),
-          metadata: {},
-        },
-        {
-          title: '互联网巨头发布全新AI助手',
-          content: '互联网巨头今日发布了全新AI助手，功能强大，能够完成多种任务。',
-          source: '网易科技',
-          sourceUrl: 'https://tech.163.com/',
-          sourceId: '3',
-          category: '科技新闻',
-          heatScore: 75,
-          publishedAt: new Date(),
-          metadata: {},
-        },
-        {
-          title: '创业公司融资热度持续升温',
-          content: '近期创业公司融资热度持续升温，多家公司获得大额融资。',
-          source: '腾讯科技',
-          sourceUrl: 'https://tech.qq.com/',
-          sourceId: '4',
-          category: '创业投资',
-          heatScore: 70,
-          publishedAt: new Date(),
-          metadata: {},
-        },
-        {
-          title: '5G技术在工业领域的应用加速',
-          content: '5G技术在工业领域的应用加速，将带来生产效率的大幅提升。',
-          source: '36氪',
-          sourceUrl: 'https://36kr.com/',
-          sourceId: '5',
-          category: '科技新闻',
-          heatScore: 65,
-          publishedAt: new Date(),
-          metadata: {},
-        },
-      ];
-      allHotspots.push(...defaultHotspots);
+      logger.info('没有获取到热点数据，使用默认热点数据', 'DataSourceManager');
+      allHotspots.push(...DEFAULT_HOTSPOTS);
     }
 
     return allHotspots.sort((a, b) => b.heatScore - a.heatScore);
+  }
+
+  private async updateLastFetched(dataSourceId: string): Promise<void> {
+    await prisma.dataSource.update({
+      where: { id: dataSourceId },
+      data: { lastFetched: new Date() },
+    });
+  }
+
+  private async updateHealthStatus(
+    dataSourceId: string, 
+    status: 'healthy' | 'warning' | 'error', 
+    responseTime: number,
+    errorMessage?: string
+  ): Promise<void> {
+    const existing = await prisma.dataSourceHealth.findUnique({
+      where: { dataSourceId },
+    });
+
+    const updateData: any = {
+      status,
+      lastCheckAt: new Date(),
+      avgResponseTime: responseTime,
+    };
+
+    if (status === 'healthy') {
+      updateData.lastSuccessAt = new Date();
+      updateData.successCount = existing ? existing.successCount + 1 : 1;
+    } else {
+      updateData.lastErrorAt = new Date();
+      updateData.lastError = errorMessage;
+      updateData.errorCount = existing ? existing.errorCount + 1 : 1;
+    }
+
+    await prisma.dataSourceHealth.upsert({
+      where: { dataSourceId },
+      update: updateData,
+      create: {
+        dataSourceId,
+        ...updateData,
+        successCount: status === 'healthy' ? 1 : 0,
+        errorCount: status !== 'healthy' ? 1 : 0,
+      },
+    });
+  }
+
+  cancelFetch(): void {
+    if (this.fetchAbortController) {
+      this.fetchAbortController.abort();
+      this.fetchAbortController = null;
+      logger.info('已取消数据获取请求', 'DataSourceManager');
+    }
   }
 
   getSource(id: string): BaseDataSource | undefined {

@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import MainLayout from '@/components/layout/MainLayout';
 import Card from '@/components/ui/Card';
 import Button, { IconButton } from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
+import ShareCard from '@/components/ui/ShareCard';
 import { api, Hotspot, PaginatedResponse, Notification } from '@/lib/api';
 import { 
   Search, 
@@ -18,9 +19,60 @@ import {
   Globe,
   ChevronDown,
   Bell,
-  BellOff,
-  Check
+  Check,
+  X,
+  ArrowUpDown,
+  Calendar,
+  Shield,
+  AlertTriangle,
+  Sparkles,
+  RotateCcw,
+  Share2,
+  Loader2
 } from 'lucide-react';
+
+type SortOption = 'createdAt' | 'publishedAt' | 'heatScore';
+type SortOrder = 'asc' | 'desc';
+type TimeRange = '1h' | '24h' | '7d' | '30d' | 'all';
+type VerificationStatus = 'all' | 'verified' | 'fake' | 'pending';
+
+interface FilterState {
+  source: string;
+  timeRange: TimeRange;
+  heatLevel: string;
+  verificationStatus: VerificationStatus;
+  hasKeyword: boolean;
+  hasSummary: boolean;
+}
+
+const sortOptions = [
+  { value: 'createdAt', label: '最新发现', icon: Clock },
+  { value: 'publishedAt', label: '最新发布', icon: Calendar },
+  { value: 'heatScore', label: '热度分数', icon: Flame },
+];
+
+const timeRangeOptions = [
+  { value: 'all', label: '全部时间' },
+  { value: '1h', label: '最近1小时' },
+  { value: '24h', label: '最近24小时' },
+  { value: '7d', label: '最近7天' },
+  { value: '30d', label: '最近30天' },
+];
+
+const heatLevelOptions = [
+  { value: 'all', label: '全部热度' },
+  { value: '80-100', label: '🔥 火爆 (80-100)' },
+  { value: '60-79', label: '🌡️ 热门 (60-79)' },
+  { value: '40-59', label: '📈 上升 (40-59)' },
+  { value: '0-39', label: '🆕 新发现 (0-39)' },
+];
+
+const verificationOptions = [
+  { value: 'all', label: '全部', icon: null },
+  { value: 'verified', label: '已验证', icon: Shield },
+  { value: 'fake', label: '疑似虚假', icon: AlertTriangle },
+  { value: 'pending', label: '待验证', icon: Sparkles },
+];
 
 export default function HotspotsPage() {
   const [data, setData] = useState<PaginatedResponse<Hotspot> | null>(null);
@@ -28,14 +80,54 @@ export default function HotspotsPage() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [page, setPage] = useState(1);
-  const [selectedSource, setSelectedSource] = useState<string>('all');
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
+  
+  // 排序状态
+  const [sortBy, setSortBy] = useState<SortOption>('createdAt');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
+  
+  // 筛选状态
+  const [filters, setFilters] = useState<FilterState>({
+    source: 'all',
+    timeRange: 'all',
+    heatLevel: 'all',
+    verificationStatus: 'all',
+    hasKeyword: false,
+    hasSummary: false,
+  });
+  
+  // 下拉菜单状态
+  const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
   const [sourceDropdownOpen, setSourceDropdownOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const sortDropdownRef = useRef<HTMLDivElement>(null);
+  const sourceDropdownRef = useRef<HTMLDivElement>(null);
+  
+  // 无限滚动
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+  
+  // 分享功能
+  const [shareHotspot, setShareHotspot] = useState<Hotspot | null>(null);
 
   useEffect(() => {
-    fetchHotspots();
+    fetchHotspots(1, false);
     fetchNotifications();
-  }, [page]);
+  }, [sortBy, sortOrder, filters]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (sortDropdownRef.current && !sortDropdownRef.current.contains(e.target as Node)) {
+        setSortDropdownOpen(false);
+      }
+      if (sourceDropdownRef.current && !sourceDropdownRef.current.contains(e.target as Node)) {
+        setSourceDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const fetchNotifications = async () => {
     try {
@@ -55,27 +147,129 @@ export default function HotspotsPage() {
     }
   };
 
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setSourceDropdownOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const fetchHotspots = async () => {
+  const fetchHotspots = async (pageNum = page, append = false) => {
     try {
-      setLoading(true);
-      const result = await api.getHotspots({ page, limit: 10 });
-      setData(result);
+      if (pageNum === 1) {
+        setLoading(true);
+      } else {
+        setLoadingMore(true);
+      }
+      
+      // 解析热度等级
+      let minHeat = 0;
+      let maxHeat: number | undefined;
+      if (filters.heatLevel !== 'all') {
+        const [min, max] = filters.heatLevel.split('-').map(Number);
+        minHeat = min;
+        maxHeat = max;
+      }
+      
+      // 解析验证状态
+      let isVerified: boolean | undefined;
+      let isFake: boolean | undefined;
+      if (filters.verificationStatus === 'verified') {
+        isVerified = true;
+      } else if (filters.verificationStatus === 'fake') {
+        isFake = true;
+      } else if (filters.verificationStatus === 'pending') {
+        isVerified = false;
+        isFake = false;
+      }
+      
+      const result = await api.getHotspots({
+        page: pageNum,
+        limit: 10,
+        source: filters.source !== 'all' ? filters.source : undefined,
+        minHeat,
+        maxHeat,
+        sortBy,
+        sortOrder,
+        timeRange: filters.timeRange !== 'all' ? filters.timeRange as any : undefined,
+        isVerified,
+        isFake,
+        hasSummary: filters.hasSummary ? true : undefined,
+      });
+      
+      if (append && data) {
+        setData({
+          ...result,
+          data: [...data.data, ...result.data],
+        });
+      } else {
+        setData(result);
+      }
+      
+      setHasMore(result.pagination.page < result.pagination.totalPages);
     } catch (error) {
       console.error('获取热点失败:', error);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   };
+  
+  // 加载更多
+  const loadMore = () => {
+    if (!loadingMore && hasMore) {
+      const nextPage = page + 1;
+      setPage(nextPage);
+      fetchHotspots(nextPage, true);
+    }
+  };
+  
+  // 无限滚动观察器
+  useEffect(() => {
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+    }
+    
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !loadingMore) {
+          loadMore();
+        }
+      },
+      { threshold: 0.1 }
+    );
+    
+    if (loadMoreRef.current) {
+      observerRef.current.observe(loadMoreRef.current);
+    }
+    
+    return () => {
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+      }
+    };
+  }, [hasMore, loadingMore, page]);
+
+  const toggleSortOrder = () => {
+    setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc');
+    setPage(1);
+  };
+
+  const resetFilters = () => {
+    setFilters({
+      source: 'all',
+      timeRange: 'all',
+      heatLevel: 'all',
+      verificationStatus: 'all',
+      hasKeyword: false,
+      hasSummary: false,
+    });
+    setSortBy('createdAt');
+    setSortOrder('desc');
+    setPage(1);
+  };
+
+  const hasActiveFilters = useMemo(() => {
+    return filters.source !== 'all' ||
+      filters.timeRange !== 'all' ||
+       filters.heatLevel !== 'all' ||
+       filters.verificationStatus !== 'all' ||
+       filters.hasKeyword ||
+       filters.hasSummary;
+  }, [filters]);
 
   const formatTime = (dateString: string | null) => {
     if (!dateString) return '未知';
@@ -122,13 +316,16 @@ export default function HotspotsPage() {
   const defaultSources = ['Twitter', 'Hacker News', 'Reddit', 'RSS', '百度搜索', 'Bing搜索'];
   const sourceSet = new Set([...defaultSources, ...(data?.data.map(h => h.source) || [])]);
   const sources = ['all', ...Array.from(sourceSet)];
-  
-  const filteredHotspots = data?.data.filter(hotspot => {
-    const matchesSearch = hotspot.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (hotspot.summary && hotspot.summary.toLowerCase().includes(searchQuery.toLowerCase()));
-    const matchesSource = selectedSource === 'all' || hotspot.source === selectedSource;
-    return matchesSearch && matchesSource;
-  }) || [];
+
+  const getVerificationBadge = (hotspot: Hotspot) => {
+    if (hotspot.isVerified) {
+      return <Badge variant="success" className="text-xs">已验证</Badge>;
+    }
+    if (hotspot.isFake) {
+      return <Badge variant="danger" className="text-xs">疑似虚假</Badge>;
+    }
+    return null;
+  };
 
   return (
     <MainLayout 
@@ -136,23 +333,66 @@ export default function HotspotsPage() {
       subtitle="发现各平台热门内容"
       actions={
         <div className="flex items-center gap-3">
-          <div ref={dropdownRef} className="relative">
+          {/* 排序下拉菜单 */}
+          <div ref={sortDropdownRef} className="relative">
+            <button
+              onClick={() => setSortDropdownOpen(!sortDropdownOpen)}
+              className="inline-flex items-center justify-center gap-2 font-medium rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2 focus:ring-offset-background border border-border text-foreground hover:bg-card hover:border-border-light active:scale-[0.98] px-4 py-2 text-sm"
+            >
+              <ArrowUpDown size={14} className="text-foreground-muted" />
+              <span className="text-sm font-medium">
+                {sortOptions.find(o => o.value === sortBy)?.label}
+              </span>
+              <button
+                onClick={(e) => { e.stopPropagation(); toggleSortOrder(); }}
+                className="p-0.5 hover:bg-card-hover rounded transition-colors"
+              >
+                <ChevronDown size={14} className={`text-foreground-muted transition-transform duration-200 ${sortOrder === 'asc' ? 'rotate-180' : ''}`} />
+              </button>
+            </button>
+            {sortDropdownOpen && (
+              <div className="absolute right-0 top-full mt-2 w-44 py-1.5 rounded-lg border border-border bg-card shadow-lg shadow-black/10 backdrop-blur-xl z-50 animate-fade-in">
+                {sortOptions.map((option) => {
+                  const Icon = option.icon;
+                  return (
+                    <button
+                      key={option.value}
+                      onClick={() => { setSortBy(option.value as SortOption); setSortDropdownOpen(false); setPage(1); }}
+                      className={`w-full text-left px-4 py-2.5 text-sm transition-colors cursor-pointer flex items-center gap-2 ${
+                        sortBy === option.value
+                          ? 'text-primary bg-primary/10 font-medium'
+                          : 'text-foreground hover:bg-card-hover'
+                      }`}
+                    >
+                      <Icon size={14} />
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* 来源筛选 */}
+          <div ref={sourceDropdownRef} className="relative">
             <button
               onClick={() => setSourceDropdownOpen(!sourceDropdownOpen)}
-              className="inline-flex items-center justify-center gap-2 font-medium rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50 disabled:cursor-not-allowed border border-border text-foreground hover:bg-card hover:border-border-light active:scale-[0.98] px-4 py-2 text-sm"
+              className={`inline-flex items-center justify-center gap-2 font-medium rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2 focus:ring-offset-background border text-foreground hover:bg-card hover:border-border-light active:scale-[0.98] px-4 py-2 text-sm ${
+                filters.source !== 'all' ? 'border-primary bg-primary/10' : 'border-border'
+              }`}
             >
               <Globe size={14} className="text-foreground-muted" />
               <span className="text-sm font-medium">
-                {selectedSource === 'all' ? '所有来源' : selectedSource}
+                {filters.source === 'all' ? '所有来源' : filters.source}
               </span>
               <ChevronDown size={14} className={`text-foreground-muted transition-transform duration-200 ${sourceDropdownOpen ? 'rotate-180' : ''}`} />
             </button>
             {sourceDropdownOpen && (
               <div className="absolute right-0 top-full mt-2 w-36 py-1.5 rounded-lg border border-border bg-card shadow-lg shadow-black/10 backdrop-blur-xl z-50 animate-fade-in">
                 <button
-                  onClick={() => { setSelectedSource('all'); setSourceDropdownOpen(false); }}
+                  onClick={() => { setFilters({...filters, source: 'all'}); setSourceDropdownOpen(false); setPage(1); }}
                   className={`w-full text-left px-4 py-2.5 text-sm transition-colors cursor-pointer ${
-                    selectedSource === 'all'
+                    filters.source === 'all'
                       ? 'text-primary bg-primary/10 font-medium'
                       : 'text-foreground hover:bg-card-hover'
                   }`}
@@ -162,9 +402,9 @@ export default function HotspotsPage() {
                 {sources.filter(s => s !== 'all').map(source => (
                   <button
                     key={source}
-                    onClick={() => { setSelectedSource(source); setSourceDropdownOpen(false); }}
+                    onClick={() => { setFilters({...filters, source}); setSourceDropdownOpen(false); setPage(1); }}
                     className={`w-full text-left px-4 py-2.5 text-sm transition-colors cursor-pointer ${
-                      selectedSource === source
+                      filters.source === source
                         ? 'text-primary bg-primary/10 font-medium'
                         : 'text-foreground hover:bg-card-hover'
                     }`}
@@ -175,8 +415,24 @@ export default function HotspotsPage() {
               </div>
             )}
           </div>
-          <Button variant="outline" icon={<Filter size={16} />}>
+
+          {/* 筛选按钮 */}
+          <Button 
+            variant={hasActiveFilters ? "primary" : "outline"} 
+            icon={<Filter size={16} />}
+            onClick={() => setShowFilterPanel(!showFilterPanel)}
+          >
             筛选
+            {hasActiveFilters && (
+              <span className="ml-1 px-1.5 py-0.5 text-xs bg-white/20 rounded">
+                {[
+                  filters.timeRange !== 'all',
+                  filters.heatLevel !== 'all',
+                  filters.verificationStatus !== 'all',
+                  filters.hasSummary,
+                ].filter(Boolean).length}
+              </span>
+            )}
           </Button>
         </div>
       }
@@ -190,18 +446,168 @@ export default function HotspotsPage() {
         </div>
       ) : (
         <div className="space-y-6 animate-fade-in">
+          {/* 搜索框 */}
           <div className="relative">
             <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-foreground-subtle" />
             <input
               type="text"
-              placeholder="搜索热点..."
+              placeholder="搜索热点标题或内容..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-11 pr-4 py-3 rounded-xl bg-card border border-border text-foreground placeholder:text-foreground-subtle focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all"
             />
           </div>
 
-          {filteredHotspots.length === 0 ? (
+          {/* 筛选面板 */}
+          {showFilterPanel && (
+            <Card className="p-6 animate-fade-in">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold text-foreground">筛选条件</h3>
+                {hasActiveFilters && (
+                  <button
+                    onClick={resetFilters}
+                    className="flex items-center gap-1 text-sm text-primary hover:text-primary/80 transition-colors"
+                  >
+                    <RotateCcw size={14} />
+                    重置筛选
+                  </button>
+                )}
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* 时间范围 */}
+                <div>
+                  <label className="block text-sm font-medium text-foreground-muted mb-2">时间范围</label>
+                  <select
+                    value={filters.timeRange}
+                    onChange={(e) => { setFilters({...filters, timeRange: e.target.value as TimeRange}); setPage(1); }}
+                    className="w-full px-3 py-2 rounded-lg bg-background-tertiary border border-border text-foreground focus:outline-none focus:border-primary/50 transition-all"
+                  >
+                    {timeRangeOptions.map(option => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 热度等级 */}
+                <div>
+                  <label className="block text-sm font-medium text-foreground-muted mb-2">热度等级</label>
+                  <select
+                    value={filters.heatLevel}
+                    onChange={(e) => { setFilters({...filters, heatLevel: e.target.value}); setPage(1); }}
+                    className="w-full px-3 py-2 rounded-lg bg-background-tertiary border border-border text-foreground focus:outline-none focus:border-primary/50 transition-all"
+                  >
+                    {heatLevelOptions.map(option => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 真实性状态 */}
+                <div>
+                  <label className="block text-sm font-medium text-foreground-muted mb-2">内容状态</label>
+                  <select
+                    value={filters.verificationStatus}
+                    onChange={(e) => { setFilters({...filters, verificationStatus: e.target.value as VerificationStatus}); setPage(1); }}
+                    className="w-full px-3 py-2 rounded-lg bg-background-tertiary border border-border text-foreground focus:outline-none focus:border-primary/50 transition-all"
+                  >
+                    {verificationOptions.map(option => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 内容属性 */}
+                <div>
+                  <label className="block text-sm font-medium text-foreground-muted mb-2">内容属性</label>
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={filters.hasSummary}
+                        onChange={(e) => { setFilters({...filters, hasSummary: e.target.checked}); setPage(1); }}
+                        className="w-4 h-4 rounded border-border bg-background-tertiary text-primary focus:ring-primary/50"
+                      />
+                      <span className="text-sm text-foreground">有AI摘要</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={filters.hasKeyword}
+                        onChange={(e) => { setFilters({...filters, hasKeyword: e.target.checked}); setPage(1); }}
+                        className="w-4 h-4 rounded border-border bg-background-tertiary text-primary focus:ring-primary/50"
+                      />
+                      <span className="text-sm text-foreground">匹配关键词</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {/* 当前筛选状态 */}
+          {hasActiveFilters && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm text-foreground-muted">当前筛选：</span>
+              {filters.timeRange !== 'all' && (
+                <Badge 
+                  variant="secondary" 
+                  className="cursor-pointer hover:bg-card-hover"
+                  onClick={() => setFilters({...filters, timeRange: 'all'})}
+                >
+                  {timeRangeOptions.find(o => o.value === filters.timeRange)?.label}
+                  <X size={12} className="ml-1" />
+                </Badge>
+              )}
+              {filters.heatLevel !== 'all' && (
+                <Badge 
+                  variant="secondary" 
+                  className="cursor-pointer hover:bg-card-hover"
+                  onClick={() => setFilters({...filters, heatLevel: 'all'})}
+                >
+                  {heatLevelOptions.find(o => o.value === filters.heatLevel)?.label}
+                  <X size={12} className="ml-1" />
+                </Badge>
+              )}
+              {filters.verificationStatus !== 'all' && (
+                <Badge 
+                  variant="secondary" 
+                  className="cursor-pointer hover:bg-card-hover"
+                  onClick={() => setFilters({...filters, verificationStatus: 'all'})}
+                >
+                  {verificationOptions.find(o => o.value === filters.verificationStatus)?.label}
+                  <X size={12} className="ml-1" />
+                </Badge>
+              )}
+              {filters.hasSummary && (
+                <Badge 
+                  variant="secondary" 
+                  className="cursor-pointer hover:bg-card-hover"
+                  onClick={() => setFilters({...filters, hasSummary: false})}
+                >
+                  有AI摘要
+                  <X size={12} className="ml-1" />
+                </Badge>
+              )}
+              {filters.hasKeyword && (
+                <Badge 
+                  variant="secondary" 
+                  className="cursor-pointer hover:bg-card-hover"
+                  onClick={() => setFilters({...filters, hasKeyword: false})}
+                >
+                  匹配关键词
+                  <X size={12} className="ml-1" />
+                </Badge>
+              )}
+            </div>
+          )}
+
+          {/* 热点列表 */}
+          {data?.data.filter(hotspot => {
+            if (!searchQuery) return true;
+            return hotspot.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+              (hotspot.summary && hotspot.summary.toLowerCase().includes(searchQuery.toLowerCase()));
+          }).length === 0 ? (
             <Card className="p-12 text-center">
               <div className="w-16 h-16 rounded-full bg-card-hover mx-auto mb-4 flex items-center justify-center">
                 <TrendingUp size={24} className="text-foreground-subtle" />
@@ -213,7 +619,11 @@ export default function HotspotsPage() {
             </Card>
           ) : (
             <div className="grid gap-4">
-              {filteredHotspots.map((hotspot, index) => {
+              {data?.data.filter(hotspot => {
+                if (!searchQuery) return true;
+                return hotspot.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                  (hotspot.summary && hotspot.summary.toLowerCase().includes(searchQuery.toLowerCase()));
+              }).map((hotspot, index) => {
                 const heatConfig = getHeatConfig(hotspot.heatScore);
                 const hotspotNotifications = notifications.filter(n => n.hotspotId === hotspot.id);
                 const unreadNotifications = hotspotNotifications.filter(n => !n.isRead);
@@ -224,6 +634,7 @@ export default function HotspotsPage() {
                     hover
                     className={`p-5 animate-slide-up hotspot-item ${unreadNotifications.length > 0 ? 'border-primary/30' : ''}`}
                     style={{ animationDelay: `${index * 50}ms` }}
+                    onClick={() => window.location.href = `/hotspots/${hotspot.id}`}
                   >
                     <div className="flex gap-5">
                       <div className={`flex-shrink-0 w-16 h-16 rounded-xl ${heatConfig.bg} ${heatConfig.border} border flex flex-col items-center justify-center`}>
@@ -240,7 +651,8 @@ export default function HotspotsPage() {
                           <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors line-clamp-2">
                             {hotspot.title}
                           </h3>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            {getVerificationBadge(hotspot)}
                             {hotspot.sourceUrl && (
                               <a
                                 href={hotspot.sourceUrl}
@@ -294,6 +706,18 @@ export default function HotspotsPage() {
                               <span>{unreadNotifications.length} 条未读通知</span>
                             </div>
                           )}
+                          
+                          {/* 分享按钮 */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShareHotspot(hotspot);
+                            }}
+                            className="flex items-center gap-1 text-xs text-foreground-muted hover:text-primary transition-colors"
+                          >
+                            <Share2 size={12} />
+                            <span>分享</span>
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -303,49 +727,39 @@ export default function HotspotsPage() {
             </div>
           )}
 
-          {data && data.pagination.totalPages > 1 && (
-            <div className="flex items-center justify-center gap-4 pt-6">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page === 1}
-                onClick={() => setPage(p => p - 1)}
-                icon={<ChevronLeft size={16} />}
-              >
-                上一页
-              </Button>
-              
-              <div className="flex items-center gap-2">
-                {Array.from({ length: Math.min(5, data.pagination.totalPages) }, (_, i) => {
-                  const pageNum = i + 1;
-                  return (
-                    <button
-                      key={pageNum}
-                      onClick={() => setPage(pageNum)}
-                      className={`w-8 h-8 rounded-lg text-sm font-medium transition-all ${
-                        page === pageNum
-                          ? 'bg-primary text-white'
-                          : 'bg-card text-foreground-muted hover:bg-card-hover'
-                      }`}
-                    >
-                      {pageNum}
-                    </button>
-                  );
-                })}
+          {/* 无限滚动加载触发器 */}
+          <div ref={loadMoreRef} className="py-4 text-center">
+            {loadingMore && (
+              <div className="flex items-center justify-center gap-2 text-foreground-muted">
+                <Loader2 size={18} className="animate-spin" />
+                <span>加载更多...</span>
               </div>
+            )}
+            {!hasMore && data && data.data.length > 0 && (
+              <span className="text-sm text-foreground-muted">没有更多数据了</span>
+            )}
+          </div>
 
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page === data.pagination.totalPages}
-                onClick={() => setPage(p => p + 1)}
-              >
-                下一页
-                <ChevronRight size={16} />
-              </Button>
+          {/* 结果统计 */}
+          {data && (
+            <div className="text-center text-sm text-foreground-muted pt-4">
+              共 {data.pagination.total} 条结果
+              {hasMore && ' · 向下滚动加载更多'}
             </div>
           )}
         </div>
+      )}
+      
+      {/* 分享弹窗 */}
+      {shareHotspot && (
+        <ShareCard
+          isOpen={!!shareHotspot}
+          onClose={() => setShareHotspot(null)}
+          title={shareHotspot.title}
+          source={shareHotspot.source}
+          heatScore={shareHotspot.heatScore}
+          summary={shareHotspot.summary ?? undefined}
+        />
       )}
     </MainLayout>
   );

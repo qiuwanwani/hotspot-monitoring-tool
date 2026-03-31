@@ -1,0 +1,147 @@
+{
+  "metadata": {
+    "title": "热点监控工具",
+    "description": "自动发现和监控热点信息，第一时间推送通知"
+  },
+  "navigation": {
+    "dashboard": "仪表盘",
+    "keywords": "关键词",
+    "hotspots": "热点",
+    "notifications": "通知",
+    "settings": "设置"
+  },
+  "dashboard": {
+    "title": "仪表盘",
+    "subtitle": "实时监控热点动态",
+    "stats": {
+      "activeKeywords": "活跃关键词",
+      "totalHotspots": "热点总数",
+      "notifications": "通知数",
+      "averageHeat": "平均热度"
+    },
+    "charts": {
+      "trend": "热点趋势",
+      "trendSubtitle": "近7天热点数量和平均热度",
+      "sourceDistribution": "来源分布",
+      "sourceDistributionSubtitle": "各数据源占比",
+      "heatDistribution": "热度分布",
+      "heatDistributionSubtitle": "热点热度等级统计"
+    },
+    "latestHotspots": "最新热点",
+    "latestHotspotsSubtitle": "实时热门内容",
+    "viewAll": "查看全部",
+    "keywords": "关键词",
+    "keywordsSubtitle": "监控列表",
+    "viewAllKeywords": "查看全部关键词",
+    "systemStatus": "系统状态",
+    "systemRunning": "系统运行中",
+    "monitorService": "监控服务",
+    "active": "活跃",
+    "lastUpdate": "最近更新",
+    "dataSources": "数据源"
+  },
+  "hotspots": {
+    "title": "热点列表",
+    "subtitle": "发现各平台热门内容",
+    "search": "搜索热点标题或内容...",
+    "sort": {
+      "label": "排序",
+      "createdAt": "最新发现",
+      "publishedAt": "最新发布",
+      "heatScore": "热度分数"
+    },
+    "filter": {
+      "title": "筛选条件",
+      "reset": "重置筛选",
+      "timeRange": "时间范围",
+      "heatLevel": "热度等级",
+      "verificationStatus": "内容状态",
+      "hasSummary": "有AI摘要",
+      "hasKeyword": "匹配关键词"
+    },
+    "timeRange": {
+      "all": "全部时间",
+      "1h": "最近1小时",
+      "24h": "最近24小时",
+      "7d": "最近7天",
+      "30d": "最近30天"
+    },
+    "heatLevel": {
+      "all": "全部热度",
+      "hot": "火爆 (80-100)",
+      "warm": "热门 (60-79)",
+      "rising": "上升 (40-59)",
+      "new": "新发现 (0-39)"
+    },
+    "verification": {
+      "all": "全部",
+      "verified": "已验证",
+      "fake": "疑似虚假",
+      "pending": "待验证"
+    },
+    "noHotspots": "暂无热点",
+    "noHotspotsDescription": "发现热点后将在此显示",
+    "addKeywordsPrompt": "添加关键词开始监控"
+  },
+  "keywords": {
+    "title": "关键词管理",
+    "subtitle": "管理监控关键词",
+    "add": "添加关键词",
+    "edit": "编辑",
+    "delete": "删除",
+    "active": "活跃",
+    "paused": "暂停",
+    "noKeywords": "暂无关键词",
+    "noKeywordsDescription": "添加关键词开始监控热点"
+  },
+  "notifications": {
+    "title": "通知中心",
+    "subtitle": "查看系统通知和提醒",
+    "markAsRead": "标记为已读",
+    "markAllAsRead": "全部标记为已读",
+    "noNotifications": "暂无通知",
+    "noNotificationsDescription": "当发现热点时将收到通知"
+  },
+  "settings": {
+    "title": "系统设置",
+    "subtitle": "配置系统参数",
+    "save": "保存设置",
+    "saved": "设置已保存",
+    "sections": {
+      "notifications": "通知设置",
+      "ai": "AI 集成",
+      "email": "邮件服务"
+    }
+  },
+  "common": {
+    "loading": "加载中...",
+    "error": "出错了",
+    "retry": "重试",
+    "cancel": "取消",
+    "confirm": "确认",
+    "save": "保存",
+    "delete": "删除",
+    "edit": "编辑",
+    "add": "添加",
+    "search": "搜索",
+    "filter": "筛选",
+    "sort": "排序",
+    "close": "关闭",
+    "back": "返回",
+    "next": "下一步",
+    "previous": "上一步",
+    "submit": "提交",
+    "success": "成功",
+    "failed": "失败",
+    "all": "全部",
+    "none": "无",
+    "more": "更多",
+    "less": "收起",
+    "show": "显示",
+    "hide": "隐藏",
+    "enable": "启用",
+    "disable": "禁用",
+    "on": "开启",
+    "off": "关闭"
+  }
+}
