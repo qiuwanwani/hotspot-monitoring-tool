@@ -23,6 +23,11 @@ export class HackerNewsDataSource extends BaseDataSource {
   }
 
   async fetch(keywords?: string[]): Promise<SourceHotspot[]> {
+    // 没有关键词时不抓取数据
+    if (!keywords || keywords.length === 0) {
+      return [];
+    }
+
     const config = this.config as HackerNewsConfig;
     const storyTypes = config.storyTypes || ['top', 'new'];
     const hotspots: SourceHotspot[] = [];
@@ -31,10 +36,10 @@ export class HackerNewsDataSource extends BaseDataSource {
       try {
         const storyIds = await this.getStoryIds(storyType);
         const stories = await this.getStories(storyIds.slice(0, config.limit || 30));
-        
+
         for (const story of stories) {
           if (!story || !story.title) continue;
-          
+
           const hotspot = this.storyToHotspot(story);
           if (this.isValidContent(hotspot) && this.matchesKeywords(hotspot, keywords)) {
             hotspots.push(hotspot);

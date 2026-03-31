@@ -55,18 +55,31 @@ export class AIService {
   }
 
   async generateSummary(title: string, content: string): Promise<string> {
-    const prompt = `请用简洁的语言总结以下热点内容（不超过100字）:
+    // 如果内容为空或与标题相同，只使用标题生成摘要
+    const effectiveContent = content && content !== title ? content : '';
+    
+    const prompt = effectiveContent
+      ? `请详细总结以下热点内容，摘要至少需要200字：
 
 标题: ${title}
-内容: ${content}
+内容: ${effectiveContent}
 
-只返回摘要内容，不要其他文字。`;
+要求：
+1. 摘要内容至少200字
+2. 包含主要观点和关键信息
+3. 语言流畅，逻辑清晰
+4. 只返回摘要内容，不要其他文字`
+      : `请根据以下标题生成一个详细的内容摘要，至少200字：
 
-    try {
-      return await this.callAI(prompt);
-    } catch (error) {
-      return title;
-    }
+标题: ${title}
+
+要求：
+1. 摘要内容至少200字
+2. 包含主要观点和关键信息
+3. 语言流畅，逻辑清晰
+4. 只返回摘要内容，不要其他文字`;
+
+    return await this.callAI(prompt);
   }
 
   private async callAI(prompt: string): Promise<string> {
@@ -88,8 +101,13 @@ export class AIService {
   }
 
   private async callCustom(apiKey: string, model: string, prompt: string, baseUrl: string): Promise<string> {
+    // 确保URL以 /chat/completions 结尾
+    const url = baseUrl.endsWith('/chat/completions') 
+      ? baseUrl 
+      : `${baseUrl.replace(/\/$/, '')}/chat/completions`;
+    
     const response = await axios.post(
-      baseUrl,
+      url,
       {
         model,
         messages: [{ role: 'user', content: prompt }]

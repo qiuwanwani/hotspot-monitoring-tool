@@ -1,6 +1,5 @@
 import { BaseDataSource, SourceHotspot, SourceConfig } from './base';
 import axios from 'axios';
-import { parse } from 'node-html-parser';
 import { logger } from '../logger';
 
 interface WeiboHotspotItem {
@@ -8,13 +7,14 @@ interface WeiboHotspotItem {
   url: string;
   rank: number;
   heatValue?: number;
+  wordScheme?: string;
 }
 
 export class WeiboDataSource extends BaseDataSource {
   readonly name = '微博热搜';
   readonly type = 'weibo';
   readonly defaultConfig: SourceConfig = {
-    baseUrl: 'https://s.weibo.com/top/summary',
+    baseUrl: 'https://weibo.com/ajax/side/hotSearch',
     timeout: 30000,
     maxRetries: 3,
   };
@@ -27,6 +27,11 @@ export class WeiboDataSource extends BaseDataSource {
   }
 
   async fetch(keywords?: string[]): Promise<SourceHotspot[]> {
+    // 没有关键词时不抓取数据
+    if (!keywords || keywords.length === 0) {
+      return [];
+    }
+
     const maxRetries = this.config.maxRetries || 3;
     let lastError: Error | null = null;
 
@@ -36,7 +41,7 @@ export class WeiboDataSource extends BaseDataSource {
       } catch (error) {
         lastError = error as Error;
         logger.warn(`微博热搜获取失败 (尝试 ${attempt}/${maxRetries}): ${lastError.message}`, 'WeiboDataSource');
-        
+
         if (attempt < maxRetries) {
           // 指数退避
           await this.delay(Math.pow(2, attempt) * 1000);
@@ -49,49 +54,55 @@ export class WeiboDataSource extends BaseDataSource {
   }
 
   private async fetchWithRetry(keywords?: string[]): Promise<SourceHotspot[]> {
+    const randomIP = this.generateRandomIP();
+    const cookie = `SUB=_${Date.now()}; SUBP=0033WrSXqPxfM725Ws9jqgMF55529P9D9WWY5OqL1KqS9kL2UqS5PWn75JpX5KzhUgL.FoqNSoB0eK2ESh.2dJLoIp7LxKML1KBLBKnLxKqL1hnLBoM41K2ESh-RS0qLxK-L1K-L12zt; FG=1;`;
+
     const response = await axios.get(this.config.baseUrl, {
       timeout: this.config.timeout,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1',
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'zh-CN,zh;q=0.9',
         'Accept-Encoding': 'gzip, deflate, br',
         'Connection': 'keep-alive',
+        'CLIENT-IP': randomIP,
+        'X-FORWARDED-FOR': randomIP,
+        'Referer': 'https://s.weibo.com',
+        'Cookie': cookie,
       },
     });
 
-    const root = parse(response.data);
+    const data = response.data;
+    const realtimeList = data?.data?.realtime || [];
     const hotspots: SourceHotspot[] = [];
 
-    // 解析微博热搜列表
-    const rows = root.querySelectorAll('#pl_top_realtimehot tbody tr');
-    
-    for (let i = 0; i < rows.length; i++) {
-      const row = rows[i];
-      
+    for (let i = 0; i < realtimeList.length; i++) {
+      const item = realtimeList[i];
+
       try {
-        const item = this.parseRow(row, i + 1);
-        if (!item) continue;
+        const parsedItem = this.parseItem(item, i + 1);
+        if (!parsedItem) continue;
 
         // 如果有关键词，检查是否匹配
         if (keywords && keywords.length > 0) {
-          const matches = this.matchesKeywords(item.title, keywords);
+          const matches = this.matchesKeywords(parsedItem.title, keywords);
           if (!matches) continue;
         }
 
-        const heatScore = this.calculateHeatScoreFromRank(item.rank, item.heatValue);
+        const heatScore = this.calculateHeatScoreFromRank(parsedItem.rank, parsedItem.heatValue);
 
         const hotspot: SourceHotspot = {
-          title: item.title,
+          title: parsedItem.title,
           source: this.name,
-          sourceUrl: item.url,
-          sourceId: `weibo_${item.rank}`,
+          sourceUrl: parsedItem.url,
+          sourceId: `weibo_${parsedItem.rank}`,
           heatScore,
           category: 'social',
           publishedAt: new Date(),
           metadata: {
-            rank: item.rank,
-            heatValue: item.heatValue,
+            rank: parsedItem.rank,
+            heatValue: parsedItem.heatValue,
+            wordScheme: parsedItem.wordScheme,
             platform: 'weibo',
           },
         };
@@ -100,7 +111,7 @@ export class WeiboDataSource extends BaseDataSource {
           hotspots.push(hotspot);
         }
       } catch (error) {
-        logger.debug(`解析微博热搜行 ${i} 失败`, 'WeiboDataSource');
+        logger.debug(`解析微博热搜项 ${i} 失败`, 'WeiboDataSource');
       }
     }
 
@@ -108,31 +119,21 @@ export class WeiboDataSource extends BaseDataSource {
     return hotspots;
   }
 
-  private parseRow(row: any, defaultRank: number): WeiboHotspotItem | null {
-    const rankElem = row.querySelector('.ranktop, .ranktop_hot, .ranktop_new');
-    const titleElem = row.querySelector('td a');
-    const heatElem = row.querySelector('.star_num, .hot');
-    
-    if (!titleElem) return null;
+  private parseItem(item: any, defaultRank: number): WeiboHotspotItem | null {
+    const title = item.note || item.word;
+    if (!title) return null;
 
-    const title = titleElem.text.trim();
-    const href = titleElem.getAttribute('href');
-    const url = href ? (href.startsWith('http') ? href : `https://s.weibo.com${href}`) : '';
-    
-    const rankText = rankElem?.text.trim() || String(defaultRank);
-    const rank = parseInt(rankText) || defaultRank;
+    const wordScheme = item.word_scheme || item.word;
+    const url = wordScheme ? `https://s.weibo.com/weibo?q=${encodeURIComponent(wordScheme)}` : '';
+    const rank = item.rank || defaultRank;
+    const heatValue = item.num ? parseFloat(item.num) : undefined;
 
-    // 提取热度数值
-    const heatText = heatElem?.text.trim() || '';
-    const heatMatch = heatText.match(/(\d+(?:\.\d+)?)/);
-    const heatValue = heatMatch ? parseFloat(heatMatch[1]) : undefined;
-
-    return { title, url, rank, heatValue };
+    return { title, url, rank, heatValue, wordScheme };
   }
 
   private calculateHeatScoreFromRank(rank: number, heatValue?: number): number {
     let score = 0;
-    
+
     // 基于排名计算基础分数
     if (rank === 1) score = 100;
     else if (rank <= 3) score = 90;
@@ -144,8 +145,8 @@ export class WeiboDataSource extends BaseDataSource {
 
     // 根据热度值微调
     if (heatValue) {
-      if (heatValue > 1000) score += 5;
-      if (heatValue > 5000) score += 5;
+      if (heatValue > 1000000) score += 5;
+      if (heatValue > 5000000) score += 5;
     }
 
     return Math.min(100, score);
@@ -154,6 +155,10 @@ export class WeiboDataSource extends BaseDataSource {
   private matchesKeywords(title: string, keywords: string[]): boolean {
     const titleLower = title.toLowerCase();
     return keywords.some(kw => titleLower.includes(kw.toLowerCase()));
+  }
+
+  private generateRandomIP(): string {
+    return `${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`;
   }
 
   private delay(ms: number): Promise<void> {

@@ -81,14 +81,27 @@ export interface PaginatedResponse<T> {
 }
 
 class ApiClient {
+  // 简单的内存缓存
+  private cache: Map<string, { data: any; timestamp: number }> = new Map();
+  private readonly CACHE_DURATION = 30000; // 30秒缓存
+
   private async request<T>(
     endpoint: string,
     options?: RequestInit,
-    timeout: number = 10000
+    timeout: number = 30000, // 增加到30秒
+    useCache: boolean = true
   ): Promise<T> {
+    const cacheKey = `${endpoint}${options?.body || ''}`;
+    
+    // 检查缓存
+    if (useCache && options?.method !== 'POST' && options?.method !== 'PUT' && options?.method !== 'DELETE') {
+      const cached = this.cache.get(cacheKey);
+      if (cached && Date.now() - cached.timestamp < this.CACHE_DURATION) {
+        return cached.data as T;
+      }
+    }
+
     try {
-      console.log('API请求开始:', `${API_BASE}${endpoint}`);
-      
       // 创建 AbortController 用于超时控制
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeout);
@@ -104,29 +117,36 @@ class ApiClient {
       
       clearTimeout(timeoutId);
 
-      console.log('API请求响应:', response.status, response.statusText);
-
       if (!response.ok) {
         const error = await response.json().catch(() => ({ error: '请求失败' }));
-        console.error('API请求错误:', error);
         throw new Error(error.error || '请求失败');
       }
 
       const data = await response.json();
-      console.log('API请求成功:', data);
+      
+      // 缓存数据
+      if (useCache && options?.method !== 'POST' && options?.method !== 'PUT' && options?.method !== 'DELETE') {
+        this.cache.set(cacheKey, { data, timestamp: Date.now() });
+      }
+      
       return data;
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
-        console.error('API请求超时:', endpoint);
         throw new Error('请求超时，请稍后重试');
       }
-      console.error('API请求异常:', error);
       throw error;
     }
   }
 
-  async getKeywords(): Promise<Keyword[]> {
-    return this.request<Keyword[]>('/keywords');
+  // 清除缓存
+  clearCache() {
+    this.cache.clear();
+  }
+
+  async getKeywords(skipCache: boolean = false): Promise<Keyword[]> {
+    return this.request<Keyword[]>('/keywords', skipCache ? {
+      headers: { 'x-skip-cache': 'true' }
+    } : undefined);
   }
 
   async createKeyword(data: {
@@ -134,10 +154,13 @@ class ApiClient {
     category?: string;
     checkInterval?: number;
   }): Promise<Keyword> {
-    return this.request<Keyword>('/keywords', {
+    const result = await this.request<Keyword>('/keywords', {
       method: 'POST',
       body: JSON.stringify(data),
     });
+    // 创建后清除缓存
+    this.clearCache();
+    return result;
   }
 
   async getKeyword(id: string): Promise<Keyword> {
@@ -153,16 +176,22 @@ class ApiClient {
       checkInterval?: number;
     }
   ): Promise<Keyword> {
-    return this.request<Keyword>(`/keywords/${id}`, {
+    const result = await this.request<Keyword>(`/keywords/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
+    // 更新后清除缓存
+    this.clearCache();
+    return result;
   }
 
   async deleteKeyword(id: string): Promise<{ success: boolean }> {
-    return this.request<{ success: boolean }>(`/keywords/${id}`, {
+    const result = await this.request<{ success: boolean }>(`/keywords/${id}`, {
       method: 'DELETE',
     });
+    // 删除后清除缓存，确保下次获取最新数据
+    this.clearCache();
+    return result;
   }
 
   async getHotspots(params?: {
@@ -203,6 +232,10 @@ class ApiClient {
 
   async getHotspot(id: string): Promise<Hotspot> {
     return this.request<Hotspot>(`/hotspots/${id}`);
+  }
+
+  async getHotspotStats(): Promise<{ total: number; today: number }> {
+    return this.request<{ total: number; today: number }>('/hotspots/stats');
   }
 
   async updateHotspot(

@@ -21,6 +21,7 @@ import {
   CheckCircle,
   AlertTriangle,
   Sparkles,
+  Loader2,
 } from 'lucide-react';
 
 interface HotspotDetail {
@@ -57,6 +58,9 @@ export default function HotspotDetailPage() {
   const [loading, setLoading] = useState(true);
   const [isFavorited, setIsFavorited] = useState(false);
   const [favoriteCount, setFavoriteCount] = useState(0);
+  const [generatingSummary, setGeneratingSummary] = useState(false);
+  const [displayedSummary, setDisplayedSummary] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
 
   useEffect(() => {
     fetchHotspotDetail();
@@ -115,6 +119,51 @@ export default function HotspotDetailPage() {
       // 复制链接到剪贴板
       navigator.clipboard.writeText(window.location.href);
       alert('链接已复制到剪贴板');
+    }
+  };
+
+  // 打字机效果
+  const typeWriter = (text: string, speed: number = 30) => {
+    setIsTyping(true);
+    setDisplayedSummary('');
+    let index = 0;
+    
+    const type = () => {
+      if (index < text.length) {
+        setDisplayedSummary(text.substring(0, index + 1));
+        index++;
+        setTimeout(type, speed);
+      } else {
+        setIsTyping(false);
+      }
+    };
+    
+    type();
+  };
+
+  const handleGenerateSummary = async () => {
+    if (hotspot?.summary || generatingSummary) return;
+
+    try {
+      setGeneratingSummary(true);
+      const response = await fetch(`/api/hotspots/${params.id}/summary`, {
+        method: 'POST',
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setHotspot((prev) => prev ? { ...prev, summary: data.summary } : null);
+        // 使用打字机效果展示生成的摘要
+        typeWriter(data.summary, 30);
+      } else {
+        const error = await response.json();
+        alert(error.error || '生成摘要失败');
+      }
+    } catch (error) {
+      console.error('生成摘要失败:', error);
+      alert('生成摘要失败，请稍后重试');
+    } finally {
+      setGeneratingSummary(false);
     }
   };
 
@@ -246,25 +295,49 @@ export default function HotspotDetailPage() {
               )}
 
               {/* 摘要 */}
-              {hotspot.summary && (
-                <div className="mb-6">
-                  <h3 className="text-sm font-medium text-foreground-muted mb-2 flex items-center gap-2">
-                    <Sparkles size={14} />
-                    AI摘要
-                  </h3>
-                  <p className="text-foreground leading-relaxed bg-card-hover p-4 rounded-xl">
-                    {hotspot.summary}
+              <div className="mb-6">
+                <h3 className="text-sm font-medium text-foreground-muted mb-2 flex items-center gap-2">
+                  <Sparkles size={14} />
+                  AI摘要
+                </h3>
+                {hotspot.summary ? (
+                  <p className="text-foreground leading-relaxed bg-card-hover p-4 rounded-xl min-h-[60px]">
+                    {isTyping ? displayedSummary : hotspot.summary}
+                    {isTyping && (
+                      <span className="inline-block w-2 h-4 bg-primary ml-1 animate-pulse" />
+                    )}
                   </p>
-                </div>
-              )}
+                ) : (
+                  <button
+                    onClick={handleGenerateSummary}
+                    disabled={generatingSummary}
+                    className="w-full text-left bg-card-hover hover:bg-card p-4 rounded-xl border border-dashed border-border hover:border-primary/50 transition-all group"
+                  >
+                    <div className="flex items-center justify-center gap-2 text-foreground-muted group-hover:text-primary transition-colors">
+                      {generatingSummary ? (
+                        <>
+                          <Loader2 size={16} className="animate-spin" />
+                          <span>AI正在生成摘要...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles size={16} />
+                          <span>点击生成AI摘要</span>
+                        </>
+                      )}
+                    </div>
+                  </button>
+                )}
+              </div>
 
               {/* 正文内容 */}
               {hotspot.content && (
                 <div className="mb-6">
                   <h3 className="text-sm font-medium text-foreground-muted mb-2">详细内容</h3>
-                  <div className="text-foreground leading-relaxed whitespace-pre-wrap">
-                    {hotspot.content}
-                  </div>
+                  <div 
+                    className="text-foreground leading-relaxed prose prose-invert max-w-none"
+                    dangerouslySetInnerHTML={{ __html: hotspot.content }}
+                  />
                 </div>
               )}
 

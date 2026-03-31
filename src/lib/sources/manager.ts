@@ -8,6 +8,8 @@ import { ZhihuDataSource } from './zhihu';
 import { HackerNewsDataSource } from './hackernews';
 import { RedditDataSource } from './reddit';
 import { TwitterDataSource } from './twitter';
+import { DuckDuckGoDataSource } from './duckduckgo';
+import { BaiduDataSource } from './baidu';
 import { logger } from '../logger';
 
 const DATA_SOURCE_CLASSES: Record<string, new (config?: any) => BaseDataSource> = {
@@ -19,8 +21,11 @@ const DATA_SOURCE_CLASSES: Record<string, new (config?: any) => BaseDataSource> 
   hackernews: HackerNewsDataSource,
   reddit: RedditDataSource,
   twitter: TwitterDataSource,
+  duckduckgo: DuckDuckGoDataSource,
+  baidu: BaiduDataSource,
 };
 
+// 只保留不需要 API 密钥的数据源
 const DEFAULT_DATA_SOURCES = [
   {
     name: 'WebScraper',
@@ -37,14 +42,6 @@ const DEFAULT_DATA_SOURCES = [
     isActive: true,
     weight: 1.5,
     minScore: 25,
-  },
-  {
-    name: 'Search',
-    type: 'search',
-    config: '{}',
-    isActive: true,
-    weight: 1,
-    minScore: 20,
   },
   {
     name: '微博热搜',
@@ -70,67 +67,51 @@ const DEFAULT_DATA_SOURCES = [
     weight: 1.2,
     minScore: 25,
   },
+  {
+    name: 'DuckDuckGo',
+    type: 'duckduckgo',
+    config: '{}',
+    isActive: true,
+    weight: 1.3,
+    minScore: 20,
+  },
+  {
+    name: '百度热搜',
+    type: 'baidu',
+    config: '{}',
+    isActive: true,
+    weight: 1.5,
+    minScore: 25,
+  },
+  // 以下数据源需要 API 密钥，默认禁用
+  // {
+  //   name: 'Search',
+  //   type: 'search',
+  //   config: '{}',
+  //   isActive: false,
+  //   weight: 1,
+  //   minScore: 20,
+  // },
+  // {
+  //   name: 'Reddit',
+  //   type: 'reddit',
+  //   config: '{}',
+  //   isActive: false,
+  //   weight: 1,
+  //   minScore: 25,
+  // },
+  // {
+  //   name: 'Twitter',
+  //   type: 'twitter',
+  //   config: '{}',
+  //   isActive: false,
+  //   weight: 1,
+  //   minScore: 25,
+  // },
 ];
 
 // 请求超时配置
 const FETCH_TIMEOUT = 30000; // 30秒超时
-const DEFAULT_HOTSPOTS: SourceHotspot[] = [
-  {
-    title: '小米发布全新旗舰手机，搭载最新骁龙处理器',
-    content: '小米今日发布了全新旗舰手机，搭载最新骁龙处理器，性能强劲，拍照能力出色。',
-    source: '科技日报',
-    sourceUrl: 'https://www.stdaily.com/',
-    sourceId: 'default_1',
-    category: '科技新闻',
-    heatScore: 85,
-    publishedAt: new Date(),
-    metadata: {},
-  },
-  {
-    title: 'AI技术在医疗领域的应用取得重大突破',
-    content: '人工智能技术在医疗领域的应用取得重大突破，能够准确诊断多种疾病。',
-    source: '新浪科技',
-    sourceUrl: 'https://tech.sina.com.cn/',
-    sourceId: 'default_2',
-    category: '科技新闻',
-    heatScore: 80,
-    publishedAt: new Date(),
-    metadata: {},
-  },
-  {
-    title: '互联网巨头发布全新AI助手',
-    content: '互联网巨头今日发布了全新AI助手，功能强大，能够完成多种任务。',
-    source: '网易科技',
-    sourceUrl: 'https://tech.163.com/',
-    sourceId: 'default_3',
-    category: '科技新闻',
-    heatScore: 75,
-    publishedAt: new Date(),
-    metadata: {},
-  },
-  {
-    title: '创业公司融资热度持续升温',
-    content: '近期创业公司融资热度持续升温，多家公司获得大额融资。',
-    source: '腾讯科技',
-    sourceUrl: 'https://tech.qq.com/',
-    sourceId: 'default_4',
-    category: '创业投资',
-    heatScore: 70,
-    publishedAt: new Date(),
-    metadata: {},
-  },
-  {
-    title: '5G技术在工业领域的应用加速',
-    content: '5G技术在工业领域的应用加速，将带来生产效率的大幅提升。',
-    source: '36氪',
-    sourceUrl: 'https://36kr.com/',
-    sourceId: 'default_5',
-    category: '科技新闻',
-    heatScore: 65,
-    publishedAt: new Date(),
-    metadata: {},
-  },
-];
 
 export class DataSourceManager {
   private sources: Map<string, BaseDataSource> = new Map();
@@ -138,15 +119,27 @@ export class DataSourceManager {
 
   async initialize() {
     logger.info('初始化数据源管理器...', 'DataSourceManager');
-    
+
     const dbSources = await prisma.dataSource.findMany();
-    
+
     if (dbSources.length === 0) {
       logger.info('未找到数据源，创建默认数据源...', 'DataSourceManager');
       for (const defaultSource of DEFAULT_DATA_SOURCES) {
         await prisma.dataSource.create({
           data: defaultSource,
         });
+      }
+    } else {
+      // 同步新增的默认数据源
+      logger.info('同步默认数据源...', 'DataSourceManager');
+      for (const defaultSource of DEFAULT_DATA_SOURCES) {
+        const exists = dbSources.some(ds => ds.type === defaultSource.type);
+        if (!exists) {
+          logger.info(`添加新数据源: ${defaultSource.name}`, 'DataSourceManager');
+          await prisma.dataSource.create({
+            data: defaultSource,
+          });
+        }
       }
     }
 
@@ -278,10 +271,8 @@ export class DataSourceManager {
       allHotspots.push(...hotspots);
     }
 
-    // 如果没有获取到热点数据，使用默认数据
     if (allHotspots.length === 0) {
-      logger.info('没有获取到热点数据，使用默认热点数据', 'DataSourceManager');
-      allHotspots.push(...DEFAULT_HOTSPOTS);
+      logger.info('没有获取到热点数据', 'DataSourceManager');
     }
 
     return allHotspots.sort((a, b) => b.heatScore - a.heatScore);

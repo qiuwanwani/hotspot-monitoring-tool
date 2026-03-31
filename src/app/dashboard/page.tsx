@@ -18,7 +18,12 @@ import {
   Sparkles,
   BarChart3,
   PieChart,
-  Activity
+  Activity,
+  RefreshCw,
+  Database,
+  CheckCircle,
+  XCircle,
+  Loader2
 } from 'lucide-react';
 
 // 骨架屏组件
@@ -98,60 +103,129 @@ const HotspotItem = React.memo(({ hotspot }: { hotspot: Hotspot }) => (
   />
 ));
 
+interface MonitorStatus {
+  dataSources: Array<{
+    id: string;
+    name: string;
+    type: string;
+    isActive: boolean;
+    lastFetchedAt: string | null;
+    status: string;
+  }>;
+  recentLogs: Array<{
+    id: string;
+    level: string;
+    message: string;
+    createdAt: string;
+  }>;
+  stats: {
+    todayHotspots: number;
+    totalHotspots: number;
+    activeDataSources: number;
+    totalDataSources: number;
+  };
+  isFetching: boolean;
+}
+
 export default function DashboardPage() {
   const [keywords, setKeywords] = useState<Keyword[]>([]);
   const [hotspots, setHotspots] = useState<Hotspot[]>([]);
+  const [hotspotStats, setHotspotStats] = useState<{ total: number; today: number }>({ total: 0, today: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dataLoaded, setDataLoaded] = useState({ keywords: false, hotspots: false });
 
+  // 监控状态
+  const [monitorStatus, setMonitorStatus] = useState<MonitorStatus | null>(null);
+  const [isFetching, setIsFetching] = useState(false);
+  const [fetchMessage, setFetchMessage] = useState<string | null>(null);
+
   useEffect(() => {
-    fetchData();
+    // 首次加载显示 loading
+    fetchData(true);
+    fetchMonitorStatus();
+
+    // 每30秒自动刷新数据（不显示 loading）
+    const interval = setInterval(() => {
+      fetchData(false);
+      fetchMonitorStatus();
+    }, 30000);
+
+    return () => clearInterval(interval);
   }, []);
 
-  const fetchData = async () => {
+  const fetchData = async (showLoading = false) => {
     try {
-      setLoading(true);
+      // 只在手动刷新时显示 loading，自动刷新不显示避免页面闪烁
+      if (showLoading) {
+        setLoading(true);
+      }
       setError(null);
-      setDataLoaded({ keywords: false, hotspots: false });
-      console.log('开始获取数据...');
-      
-      // 使用 Promise.allSettled 确保即使一个请求失败，另一个也能完成
-      const [keywordsResult, hotspotsResult] = await Promise.allSettled([
+
+      // 使用 Promise.all 并行获取数据，减少等待时间
+      const [keywordsData, hotspotsData, statsData] = await Promise.all([
         api.getKeywords(),
-        api.getHotspots({ limit: 5 })
+        api.getHotspots({ limit: 5 }),
+        api.getHotspotStats()
       ]);
-      
-      // 处理关键词数据
-      if (keywordsResult.status === 'fulfilled') {
-        console.log('获取关键词成功:', keywordsResult.value.length);
-        setKeywords(keywordsResult.value);
-        setDataLoaded(prev => ({ ...prev, keywords: true }));
-      } else {
-        console.error('获取关键词失败:', keywordsResult.reason);
-      }
-      
-      // 处理热点数据
-      if (hotspotsResult.status === 'fulfilled') {
-        console.log('获取热点成功:', hotspotsResult.value.data.length);
-        setHotspots(hotspotsResult.value.data);
-        setDataLoaded(prev => ({ ...prev, hotspots: true }));
-      } else {
-        console.error('获取热点失败:', hotspotsResult.reason);
-      }
-      
-      // 如果两个请求都失败，显示错误
-      if (keywordsResult.status === 'rejected' && hotspotsResult.status === 'rejected') {
-        setError('获取数据失败，请稍后重试');
-      }
+
+      setKeywords(keywordsData);
+      setDataLoaded(prev => ({ ...prev, keywords: true }));
+
+      setHotspots(hotspotsData.data);
+      setDataLoaded(prev => ({ ...prev, hotspots: true }));
+
+      setHotspotStats(statsData);
     } catch (error) {
       console.error('获取数据失败:', error);
-      console.error('错误类型:', typeof error);
-      console.error('错误信息:', error instanceof Error ? error.message : error);
-      console.error('错误堆栈:', error instanceof Error ? error.stack : null);
       setError('获取数据失败，请稍后重试');
     } finally {
-      setLoading(false);
+      if (showLoading) {
+        setLoading(false);
+      }
+    }
+  };
+
+  // 获取监控状态
+  const fetchMonitorStatus = async () => {
+    try {
+      const response = await fetch('/api/monitor/status');
+      if (response.ok) {
+        const data = await response.json();
+        setMonitorStatus(data);
+      }
+    } catch (error) {
+      console.error('获取监控状态失败:', error);
+    }
+  };
+
+  // 手动触发数据获取
+  const handleManualFetch = async () => {
+    try {
+      setIsFetching(true);
+      setFetchMessage('正在获取数据...');
+      
+      const response = await fetch('/api/monitor/fetch', {
+        method: 'POST',
+      });
+      
+      if (response.ok) {
+        setFetchMessage('数据获取已启动，请稍后刷新查看结果');
+        // 5秒后刷新状态
+        setTimeout(() => {
+          fetchMonitorStatus();
+          fetchData(false);
+        }, 5000);
+      } else {
+        const error = await response.json();
+        setFetchMessage(error.error || '获取失败');
+      }
+    } catch (error) {
+      console.error('触发数据获取失败:', error);
+      setFetchMessage('触发失败，请重试');
+    } finally {
+      setTimeout(() => setIsFetching(false), 2000);
+      setTimeout(() => setFetchMessage(null), 5000);
     }
   };
 
@@ -160,9 +234,8 @@ export default function DashboardPage() {
     return keywords.filter(k => k.isActive).length;
   }, [keywords]);
 
-  const totalHotspots = useMemo(() => {
-    return hotspots.length;
-  }, [hotspots]);
+  // 使用实际的热点统计数据
+  const totalHotspots = hotspotStats.total;
 
   const totalNotifications = useMemo(() => {
     return keywords.reduce((sum, k) => sum + (k._count?.notifications || 0), 0);
@@ -177,6 +250,12 @@ export default function DashboardPage() {
   const currentTime = useMemo(() => {
     return formatTime(new Date().toISOString());
   }, []);
+
+  // 从热点数据计算实际的数据源数量
+  const dataSourceCount = useMemo(() => {
+    const sources = new Set(hotspots.map(h => h.source));
+    return sources.size;
+  }, [hotspots]);
 
   if (loading) {
     return (
@@ -478,52 +557,112 @@ export default function DashboardPage() {
               )}
             </Card>
 
-            <Card className="p-6 glow-border">
-              <div className="text-center">
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-accent-green/10 text-accent-green text-sm font-medium mb-4">
-                  <PulsingDot />
-                  实时监控中
-                </div>
-                <h3 className="text-lg font-semibold text-foreground mb-4">
-                  系统 <AnimatedGradientText>运行中</AnimatedGradientText>
-                </h3>
-                <div className="space-y-3 text-sm text-left">
-                  <div className="flex items-center justify-between">
-                    <span className="text-foreground-muted">系统状态</span>
-                    <span className="text-accent-green font-medium">运行中</span>
+            {/* 系统状态卡片 */}
+            <Card className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-accent-green/10">
+                    <Database size={20} className="text-accent-green" />
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-foreground-muted">监控服务</span>
-                    <span className="text-accent-green font-medium">活跃</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-foreground-muted">最近更新</span>
-                    <span className="text-foreground">{currentTime}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-foreground-muted">监控关键词</span>
-                    <span className="text-foreground">{activeKeywords} 个</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-foreground-muted">数据源</span>
-                    <span className="text-foreground">3 个</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-foreground-muted">热点总数</span>
-                    <span className="text-foreground">{totalHotspots} 条</span>
+                  <div>
+                    <h3 className="font-semibold text-foreground">系统状态</h3>
+                    <p className="text-sm text-foreground-muted">监控与数据获取</p>
                   </div>
                 </div>
-                <div className="mt-4 pt-4 border-t border-border/50">
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="w-full"
-                    onClick={() => window.location.href = '/hotspots'}
-                  >
-                    查看热点
-                  </Button>
+                {monitorStatus?.isFetching && (
+                  <div className="flex items-center gap-2 text-accent-orange text-sm">
+                    <Loader2 size={16} className="animate-spin" />
+                    <span>获取中...</span>
+                  </div>
+                )}
+              </div>
+
+              {/* 数据源状态 */}
+              <div className="space-y-2 mb-4">
+                <div className="text-sm font-medium text-foreground-muted mb-2">数据源状态</div>
+                {monitorStatus?.dataSources.slice(0, 5).map((ds) => (
+                  <div key={ds.id} className="flex items-center justify-between text-sm">
+                    <span className="text-foreground">{ds.name}</span>
+                    <div className="flex items-center gap-2">
+                      {ds.isActive ? (
+                        <CheckCircle size={14} className="text-accent-green" />
+                      ) : (
+                        <XCircle size={14} className="text-foreground-subtle" />
+                      )}
+                      <span className={ds.isActive ? 'text-accent-green' : 'text-foreground-subtle'}>
+                        {ds.isActive ? '活跃' : '禁用'}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+                {(monitorStatus?.dataSources.length || 0) > 5 && (
+                  <div className="text-xs text-foreground-subtle text-center">
+                    还有 {(monitorStatus?.dataSources.length || 0) - 5} 个数据源...
+                  </div>
+                )}
+              </div>
+
+              {/* 统计数据 */}
+              <div className="space-y-2 pt-4 border-t border-border/50">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-foreground-muted">今日获取</span>
+                  <span className="text-foreground font-medium">
+                    {monitorStatus?.stats.todayHotspots || 0} 条
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-foreground-muted">累计热点</span>
+                  <span className="text-foreground font-medium">
+                    {monitorStatus?.stats.totalHotspots || 0} 条
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-foreground-muted">活跃数据源</span>
+                  <span className="text-foreground font-medium">
+                    {monitorStatus?.stats.activeDataSources || 0} / {monitorStatus?.stats.totalDataSources || 0}
+                  </span>
                 </div>
               </div>
+
+              {/* 手动获取按钮 */}
+              <div className="mt-4 pt-4 border-t border-border/50 space-y-2">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  className="w-full"
+                  icon={isFetching ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                  onClick={handleManualFetch}
+                  disabled={isFetching || monitorStatus?.isFetching}
+                >
+                  {isFetching || monitorStatus?.isFetching ? '获取中...' : '立即获取热点'}
+                </Button>
+                {fetchMessage && (
+                  <div className="text-xs text-center text-foreground-muted">
+                    {fetchMessage}
+                  </div>
+                )}
+              </div>
+
+              {/* 最近日志 */}
+              {monitorStatus?.recentLogs && monitorStatus.recentLogs.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-border/50">
+                  <div className="text-sm font-medium text-foreground-muted mb-2">最近活动</div>
+                  <div className="space-y-1 max-h-24 overflow-y-auto">
+                    {monitorStatus.recentLogs.slice(0, 3).map((log) => (
+                      <div key={log.id} className="text-xs text-foreground-subtle truncate">
+                        <span className={
+                          log.level === 'error' ? 'text-accent-red' :
+                          log.level === 'warn' ? 'text-accent-orange' :
+                          'text-foreground-subtle'
+                        }>
+                          [{log.level.toUpperCase()}]
+                        </span>{' '}
+                        {log.message}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </Card>
           </div>
         </div>

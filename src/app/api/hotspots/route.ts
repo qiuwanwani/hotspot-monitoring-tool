@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 
+// 缓存热点列表，减少数据库查询
+let cache: { data: any; timestamp: number } | null = null;
+const CACHE_DURATION = 30000; // 30秒缓存
+
+// 清除缓存的辅助函数
+export function clearHotspotsCache() {
+  cache = null;
+}
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -17,7 +26,28 @@ export async function GET(req: NextRequest) {
     const isFake = searchParams.get('isFake');
     const hasSummary = searchParams.get('hasSummary');
     const keywordId = searchParams.get('keywordId');
-    
+
+    // 检查是否是第一页且无筛选条件（最常用的场景），使用缓存
+    const isDefaultQuery = page === 1 &&
+      !source &&
+      !category &&
+      minHeat === 0 &&
+      maxHeat === undefined &&
+      sortBy === 'createdAt' &&
+      sortOrder === 'desc' &&
+      !timeRange &&
+      isVerified === null &&
+      isFake === null &&
+      hasSummary === null &&
+      !keywordId;
+
+    // 使用缓存
+    if (isDefaultQuery && cache && Date.now() - cache.timestamp < CACHE_DURATION) {
+      const response = NextResponse.json(cache.data);
+      response.headers.set('X-Cache', 'HIT');
+      return response;
+    }
+
     // 构建 where 条件
     const where: any = {
       ...(source && { source }),
@@ -63,7 +93,7 @@ export async function GET(req: NextRequest) {
         some: { id: keywordId }
       };
     }
-    
+
     // 构建排序条件
     const orderBy: any = {};
     if (sortBy === 'heatScore') {
@@ -75,22 +105,24 @@ export async function GET(req: NextRequest) {
     } else {
       orderBy.createdAt = 'desc';
     }
-    
-    const total = await prisma.hotspot.count({ where });
-    
-    const paginatedHotspots = await prisma.hotspot.findMany({
-      where,
-      include: {
-        keywords: {
-          select: { id: true, keyword: true, category: true }
-        }
-      },
-      orderBy,
-      skip: (page - 1) * limit,
-      take: limit
-    });
-    
-    return NextResponse.json({
+
+    // 并行执行查询以提高性能
+    const [total, paginatedHotspots] = await Promise.all([
+      prisma.hotspot.count({ where }),
+      prisma.hotspot.findMany({
+        where,
+        include: {
+          keywords: {
+            select: { id: true, keyword: true, category: true }
+          }
+        },
+        orderBy,
+        skip: (page - 1) * limit,
+        take: limit
+      })
+    ]);
+
+    const result = {
       data: paginatedHotspots,
       pagination: {
         page,
@@ -98,7 +130,16 @@ export async function GET(req: NextRequest) {
         total,
         totalPages: Math.ceil(total / limit)
       }
-    });
+    };
+
+    // 更新缓存
+    if (isDefaultQuery) {
+      cache = { data: result, timestamp: Date.now() };
+    }
+
+    const response = NextResponse.json(result);
+    response.headers.set('X-Cache', 'MISS');
+    return response;
   } catch (error) {
     console.error('获取热点列表失败:', error);
     return NextResponse.json(

@@ -179,9 +179,6 @@ export default function MonitorPage() {
             <span className="flex items-center gap-2">
               <Terminal size={16} />
               监控日志
-              <Badge variant="default" size="sm">
-                {logs.length}
-              </Badge>
             </span>
             {activeTab === 'logs' && (
               <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />

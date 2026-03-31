@@ -111,10 +111,38 @@ export default function HotspotsPage() {
   // 分享功能
   const [shareHotspot, setShareHotspot] = useState<Hotspot | null>(null);
 
+  // 使用 AbortController 来取消过时的请求
+  const abortControllerRef = useRef<AbortController | null>(null);
+
   useEffect(() => {
+    // 取消之前的请求
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = new AbortController();
+
+    // 重置页码和hasMore状态
+    setPage(1);
+    setHasMore(true);
+    
     fetchHotspots(1, false);
     fetchNotifications();
+
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
   }, [sortBy, sortOrder, filters]);
+
+  // 每30秒自动刷新数据
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchNotifications();
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -199,7 +227,7 @@ export default function HotspotsPage() {
         setData(result);
       }
       
-      setHasMore(result.pagination.page < result.pagination.totalPages);
+      setHasMore(pageNum < result.pagination.totalPages);
     } catch (error) {
       console.error('获取热点失败:', error);
     } finally {
@@ -223,13 +251,16 @@ export default function HotspotsPage() {
       observerRef.current.disconnect();
     }
     
+    // 只有在有数据且可能有更多数据时才设置观察器
+    if (!data || !hasMore) return;
+    
     observerRef.current = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && hasMore && !loadingMore) {
           loadMore();
         }
       },
-      { threshold: 0.1 }
+      { threshold: 0.1, rootMargin: '100px' }
     );
     
     if (loadMoreRef.current) {
@@ -241,7 +272,7 @@ export default function HotspotsPage() {
         observerRef.current.disconnect();
       }
     };
-  }, [hasMore, loadingMore, page]);
+  }, [hasMore, loadingMore, data?.data.length]);
 
   const toggleSortOrder = () => {
     setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc');
@@ -335,21 +366,23 @@ export default function HotspotsPage() {
         <div className="flex items-center gap-3">
           {/* 排序下拉菜单 */}
           <div ref={sortDropdownRef} className="relative">
-            <button
-              onClick={() => setSortDropdownOpen(!sortDropdownOpen)}
-              className="inline-flex items-center justify-center gap-2 font-medium rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2 focus:ring-offset-background border border-border text-foreground hover:bg-card hover:border-border-light active:scale-[0.98] px-4 py-2 text-sm"
-            >
-              <ArrowUpDown size={14} className="text-foreground-muted" />
-              <span className="text-sm font-medium">
-                {sortOptions.find(o => o.value === sortBy)?.label}
-              </span>
+            <div className="inline-flex items-center gap-1 font-medium rounded-lg transition-all duration-200 border border-border text-foreground hover:bg-card hover:border-border-light px-4 py-2 text-sm">
+              <button
+                onClick={() => setSortDropdownOpen(!sortDropdownOpen)}
+                className="inline-flex items-center gap-2 focus:outline-none"
+              >
+                <ArrowUpDown size={14} className="text-foreground-muted" />
+                <span className="text-sm font-medium">
+                  {sortOptions.find(o => o.value === sortBy)?.label}
+                </span>
+              </button>
               <button
                 onClick={(e) => { e.stopPropagation(); toggleSortOrder(); }}
-                className="p-0.5 hover:bg-card-hover rounded transition-colors"
+                className="p-0.5 hover:bg-card-hover rounded transition-colors focus:outline-none"
               >
                 <ChevronDown size={14} className={`text-foreground-muted transition-transform duration-200 ${sortOrder === 'asc' ? 'rotate-180' : ''}`} />
               </button>
-            </button>
+            </div>
             {sortDropdownOpen && (
               <div className="absolute right-0 top-full mt-2 w-44 py-1.5 rounded-lg border border-border bg-card shadow-lg shadow-black/10 backdrop-blur-xl z-50 animate-fade-in">
                 {sortOptions.map((option) => {

@@ -111,15 +111,15 @@ export class MonitorService {
       });
 
       logger.info(`找到 ${keywords.length} 个活跃关键词`, 'MonitorService');
-      
+
       keywordStrings = keywords.map(k => k.keyword);
-      
-      // 如果没有活跃关键词，使用默认关键词
+
+      // 如果没有活跃关键词，直接返回不抓取数据
       if (keywordStrings.length === 0) {
-        keywordStrings = ['科技', 'AI', '互联网', '创业', '投资'];
-        logger.info(`没有活跃关键词，使用默认关键词`, 'MonitorService');
+        logger.info(`没有活跃关键词，跳过数据获取`, 'MonitorService');
+        return;
       }
-      
+
       const hotspots = await dataSourceManager.fetchAll(keywordStrings);
 
       logger.info(`共获取 ${hotspots.length} 条热点`, 'MonitorService');
@@ -197,14 +197,6 @@ export class MonitorService {
       logger.info(`数据获取完成: 保存 ${saved} 条，跳过 ${skipped} 条`, 'MonitorService');
     } catch (error) {
       logger.error('数据获取失败', 'MonitorService', error as Error);
-      
-      // 添加默认热点数据作为fallback
-      try {
-        const saved = await this.addDefaultHotspots(keywordStrings);
-        logger.info(`默认热点数据添加完成: 保存 ${saved} 条`, 'MonitorService');
-      } catch (fallbackError) {
-        logger.error('添加默认热点数据失败', 'MonitorService', fallbackError as Error);
-      }
     } finally {
       this.isFetching = false;
     }
@@ -260,68 +252,6 @@ export class MonitorService {
     
     // 并行执行所有更新操作
     await Promise.allSettled([...updatePromises, ...notificationPromises]);
-  }
-
-  private async addDefaultHotspots(keywordStrings: string[]): Promise<number> {
-    const defaultHotspots = [
-      {
-        title: '小米发布全新旗舰手机，搭载最新骁龙处理器',
-        content: '小米今日发布了全新旗舰手机，搭载最新骁龙处理器，性能强劲，拍照能力出色。',
-        source: '科技日报',
-        sourceUrl: 'https://www.stdaily.com/',
-        sourceId: 'default_1',
-        category: '科技新闻',
-        heatScore: 85,
-        publishedAt: new Date(),
-      },
-      {
-        title: 'AI技术在医疗领域的应用取得重大突破',
-        content: '人工智能技术在医疗领域的应用取得重大突破，能够准确诊断多种疾病。',
-        source: '新浪科技',
-        sourceUrl: 'https://tech.sina.com.cn/',
-        sourceId: 'default_2',
-        category: '科技新闻',
-        heatScore: 80,
-        publishedAt: new Date(),
-      },
-      {
-        title: '互联网巨头发布全新AI助手',
-        content: '互联网巨头今日发布了全新AI助手，功能强大，能够完成多种任务。',
-        source: '网易科技',
-        sourceUrl: 'https://tech.163.com/',
-        sourceId: 'default_3',
-        category: '科技新闻',
-        heatScore: 75,
-        publishedAt: new Date(),
-      },
-    ];
-    
-    let saved = 0;
-    
-    await prisma.$transaction(async (tx) => {
-      for (const hotspot of defaultHotspots) {
-        try {
-          // 检查是否已存在
-          const existing = await tx.hotspot.findFirst({
-            where: { sourceUrl: hotspot.sourceUrl },
-          });
-          
-          if (!existing) {
-            await tx.hotspot.create({
-              data: {
-                ...hotspot,
-                keywordsMatched: keywordStrings.join(','),
-              },
-            });
-            saved++;
-          }
-        } catch (error) {
-          logger.error(`保存默认热点失败: ${hotspot.title}`, 'MonitorService', error as Error);
-        }
-      }
-    });
-    
-    return saved;
   }
 
   private async cleanupOldData() {
