@@ -10,6 +10,9 @@
 - 🤖 **AI 分析** - 使用 AI 判断信息真实性和可信度
 - 📬 **智能通知** - 邮件和 Web Push 多渠道推送
 - 📈 **热度评分** - 基于多维度数据计算热度分数
+- 🌐 **多语言支持** - 支持中文关键词和内容
+- 📱 **响应式设计** - 适配不同设备屏幕
+- 🎨 **现代 UI** - Dark Mode + Glassmorphism 设计风格
 
 ### 技术栈
 - **前端**: Next.js 14 + React + TypeScript + Tailwind CSS
@@ -17,6 +20,7 @@
 - **数据库**: SQLite (可切换 PostgreSQL/MySQL)
 - **AI**: OpenRouter / OpenAI / Anthropic API
 - **通知**: Nodemailer + Web Push
+- **数据抓取**: axios + node-html-parser
 
 ## 快速开始
 
@@ -75,23 +79,30 @@ hotspot-monitoring-tool/
 │   ├── app/               # Next.js App Router
 │   │   ├── api/           # API 路由
 │   │   │   ├── keywords/  # 关键词管理
-│   │   │   └── hotspots/  # 热点管理
+│   │   │   ├── hotspots/  # 热点管理
+│   │   │   └── monitor/   # 监控服务
 │   │   ├── dashboard/     # 仪表盘页面
-│   │   └── layout.tsx
+│   │   ├── hotspots/      # 热点列表页面
+│   │   ├── keywords/      # 关键词管理页面
+│   │   └── layout.tsx     # 主布局
 │   ├── components/        # React 组件
 │   │   ├── layout/        # 布局组件
 │   │   └── ui/            # UI 组件
 │   ├── lib/               # 核心库
 │   │   ├── ai.ts          # AI 服务
-│   │   ├── crawler.ts     # 网页爬虫
-│   │   ├── rss.ts         # RSS 抓取
-│   │   ├── twitter.ts     # Twitter API
-│   │   ├── email.ts       # 邮件服务
-│   │   ├── push.ts        # Web Push
+│   │   ├── monitor.ts     # 监控服务
 │   │   ├── notification.ts # 通知服务
-│   │   └── monitor.ts     # 监控服务
+│   │   ├── prisma.ts      # 数据库连接
+│   │   ├── sources/       # 数据源管理
+│   │   │   ├── base.ts    # 基础数据源
+│   │   │   ├── search.ts  # 搜索引擎
+│   │   │   ├── rss.ts     # RSS 抓取
+│   │   │   └── web-scraper.ts # 网页抓取
+│   │   └── api.ts         # API 客户端
 │   └── types/             # TypeScript 类型
 ├── design-system/         # 设计系统文档
+├── .env.example           # 环境变量示例
+├── clear-data.js          # 数据清空脚本
 └── package.json
 ```
 
@@ -110,6 +121,9 @@ hotspot-monitoring-tool/
 - `GET /api/hotspots/:id` - 获取热点详情
 - `PUT /api/hotspots/:id` - 更新热点
 
+### 监控服务
+- `POST /api/monitor/fetch` - 立即执行数据获取
+
 ## 设计系统
 
 项目采用 **Dark Mode + Glassmorphism** 设计风格，详见 [design-system/MASTER.md](./design-system/MASTER.md)。
@@ -120,6 +134,12 @@ hotspot-monitoring-tool/
 - 成功色: `#00ff88` (绿色)
 - 背景色: `#0a0a0f` (深色)
 
+## 数据源支持
+
+- **搜索引擎**: Hacker News, Bing News
+- **中文网站**: 36氪, 科技日报, 新浪科技, 网易科技, 腾讯科技
+- **RSS 源**: 可自定义添加
+
 ## 开发计划
 
 - [ ] 用户认证系统
@@ -128,6 +148,16 @@ hotspot-monitoring-tool/
 - [ ] 数据可视化图表
 - [ ] 移动端适配
 - [ ] 国际化支持
+
+## 贡献指南
+
+欢迎提交 Issue 和 Pull Request！
+
+1. Fork 本仓库
+2. 创建特性分支 (`git checkout -b feature/amazing-feature`)
+3. 提交更改 (`git commit -m 'Add some amazing feature'`)
+4. 推送到分支 (`git push origin feature/amazing-feature`)
+5. 打开 Pull Request
 
 ## 许可证
 

@@ -40,3 +40,21 @@ next-env.d.ts
 # prisma
 *.db
 *.db-journal
+
+# IDE
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# OS
+Thumbs.db
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+
+# test
+/src/app/api/test
