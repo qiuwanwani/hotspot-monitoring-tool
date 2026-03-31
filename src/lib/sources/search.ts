@@ -27,6 +27,7 @@ export class SearchDataSource extends BaseDataSource {
 
   constructor(config?: SearchConfig) {
     super(config);
+    this.initConfig(config);
   }
 
   async fetch(keywords?: string[]): Promise<SourceHotspot[]> {
@@ -34,7 +35,7 @@ export class SearchDataSource extends BaseDataSource {
     const engines = config.engines || this.defaultConfig.engines;
     const hotspots: SourceHotspot[] = [];
 
-    if (!keywords || keywords.length === 0) {
+    if (!keywords || keywords.length === 0 || !engines) {
       return [];
     }
 
@@ -104,7 +105,7 @@ export class SearchDataSource extends BaseDataSource {
           sourceId: `hn_${hit.objectID}`,
           category: '科技资讯',
           heatScore: this.calculateHeatScore({
-            points: hit.points || 0,
+            likes: hit.points || 0,
             comments: hit.num_comments || 0,
             ageHours,
           }),

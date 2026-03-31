@@ -91,6 +91,7 @@ export class WebScraperDataSource extends BaseDataSource {
 
   constructor(config?: WebScraperConfig) {
     super(config);
+    this.initConfig(config);
   }
 
   async fetch(keywords?: string[]): Promise<SourceHotspot[]> {
@@ -98,7 +99,7 @@ export class WebScraperDataSource extends BaseDataSource {
     const sites = config.sites || this.defaultConfig.sites;
     const hotspots: SourceHotspot[] = [];
 
-    if (!keywords || keywords.length === 0) {
+    if (!keywords || keywords.length === 0 || !sites) {
       return [];
     }
 
@@ -244,7 +245,7 @@ export class WebScraperDataSource extends BaseDataSource {
 
   private matchesKeywords(hotspot: SourceHotspot, keywords: string[]): boolean {
     const titleLower = hotspot.title.toLowerCase();
-    const contentLower = hotspot.content.toLowerCase();
+    const contentLower = hotspot.content?.toLowerCase() || '';
     
     return keywords.some(keyword => {
       const keywordLower = keyword.toLowerCase();
@@ -252,7 +253,7 @@ export class WebScraperDataSource extends BaseDataSource {
     });
   }
 
-  private calculateHeatScore(data: { views: number; ageHours: number }): number {
+  protected calculateHeatScore(data: { views: number; ageHours: number }): number {
     let score = 30;
     score += Math.min(data.views / 10, 50);
     if (data.ageHours < 24) {

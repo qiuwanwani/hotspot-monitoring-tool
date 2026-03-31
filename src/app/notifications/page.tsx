@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import MainLayout from '@/components/layout/MainLayout';
 import Card from '@/components/ui/Card';
-import Button from '@/components/ui/Button';
+import Button, { IconButton } from '@/components/ui/Button';
 import { api, Notification } from '@/lib/api';
 import { 
   Bell, 
@@ -192,7 +192,7 @@ export default function NotificationsPage() {
                     </div>
 
                     {!notification.isRead && (
-                      <Button
+                      <IconButton
                         variant="ghost"
                         size="sm"
                         onClick={() => handleMarkAsRead(notification.id)}

@@ -1,4 +1,4 @@
-const API_BASE = '/api';
+const API_BASE = 'http://localhost:3002/api';
 
 export interface Keyword {
   id: string;

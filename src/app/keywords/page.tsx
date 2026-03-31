@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import MainLayout from '@/components/layout/MainLayout';
 import Card from '@/components/ui/Card';
-import Button from '@/components/ui/Button';
+import Button, { IconButton } from '@/components/ui/Button';
 import Badge, { StatusBadge } from '@/components/ui/Badge';
 import { PulsingDot } from '@/components/ui/Motion';
 import { api, Keyword } from '@/lib/api';
@@ -246,13 +246,13 @@ export default function KeywordsPage() {
                       >
                         {keyword.isActive ? '暂停' : '启用'}
                       </Button>
-                      <Button
+                      <IconButton
                         variant="ghost"
                         size="sm"
                         onClick={() => openEditModal(keyword)}
                         icon={<Edit2 size={14} />}
                       />
-                      <Button
+                      <IconButton
                         variant="ghost"
                         size="sm"
                         onClick={() => handleDelete(keyword.id)}

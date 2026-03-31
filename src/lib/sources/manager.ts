@@ -3,6 +3,7 @@ import { BaseDataSource, SourceHotspot } from './base';
 import { RSSDataSource } from './rss';
 import { SearchDataSource } from './search';
 import { WebScraperDataSource } from './web-scraper';
+import { logger } from '../logger';
 
 const DATA_SOURCE_CLASSES: Record<string, new (config?: any) => BaseDataSource> = {
   rss: RSSDataSource,
@@ -41,12 +42,12 @@ export class DataSourceManager {
   private sources: Map<string, BaseDataSource> = new Map();
 
   async initialize() {
-    console.log('🔧 初始化数据源管理器...');
+    logger.info('初始化数据源管理器...', 'DataSourceManager');
     
     const dbSources = await prisma.dataSource.findMany();
     
     if (dbSources.length === 0) {
-      console.log('  - 未找到数据源，创建默认数据源...');
+      logger.info('未找到数据源，创建默认数据源...', 'DataSourceManager');
       for (const defaultSource of DEFAULT_DATA_SOURCES) {
         await prisma.dataSource.create({
           data: defaultSource,
@@ -55,7 +56,7 @@ export class DataSourceManager {
     }
 
     await this.loadSources();
-    console.log(`  - 已加载 ${this.sources.size} 个数据源`);
+    logger.info(`已加载 ${this.sources.size} 个数据源`, 'DataSourceManager');
   }
 
   private async loadSources() {
@@ -70,7 +71,7 @@ export class DataSourceManager {
         try {
           config = JSON.parse(dbSource.config);
         } catch (e) {
-          console.warn(`解析数据源 ${dbSource.name} 配置失败，使用默认配置`);
+          logger.warn(`解析数据源 ${dbSource.name} 配置失败，使用默认配置`, 'DataSourceManager', e as Error);
         }
         const source = new SourceClass(config);
         this.sources.set(dbSource.id, source);
@@ -84,12 +85,13 @@ export class DataSourceManager {
       where: { isActive: true },
     });
 
-    for (const dbSource of dbSources) {
+    // 并行处理所有数据源
+    const sourcePromises = dbSources.map(async (dbSource) => {
       const source = this.sources.get(dbSource.id);
-      if (!source) continue;
+      if (!source) return [];
 
       try {
-        console.log(`📡 从 ${source.name} 获取数据...`);
+        logger.info(`从 ${source.name} 获取数据...`, 'DataSourceManager');
         const hotspots = await source.fetch(keywords);
         
         const filteredHotspots = hotspots.filter(h => h.heatScore >= dbSource.minScore);
@@ -102,21 +104,34 @@ export class DataSourceManager {
           },
         }));
 
-        allHotspots.push(...weightedHotspots);
-        console.log(`  - 获取到 ${weightedHotspots.length} 条热点`);
+        logger.info(`获取到 ${weightedHotspots.length} 条热点`, 'DataSourceManager');
 
-        await prisma.dataSource.update({
+        // 异步更新最后获取时间，不阻塞主线程
+        prisma.dataSource.update({
           where: { id: dbSource.id },
           data: { lastFetched: new Date() },
+        }).catch(error => {
+          logger.error(`更新数据源 ${dbSource.name} 最后获取时间失败`, 'DataSourceManager', error as Error);
         });
+
+        return weightedHotspots;
       } catch (error) {
-        console.error(`从 ${dbSource.name} 获取数据失败:`, error);
+        logger.error(`从 ${dbSource.name} 获取数据失败`, 'DataSourceManager', error as Error);
+        return [];
       }
+    });
+
+    // 等待所有数据源处理完成
+    const results = await Promise.all(sourcePromises);
+    
+    // 合并所有热点数据
+    for (const hotspots of results) {
+      allHotspots.push(...hotspots);
     }
 
     // 如果没有获取到热点数据，使用默认的热点数据
     if (allHotspots.length === 0) {
-      console.log(`  - 没有获取到热点数据，使用默认热点数据`);
+      logger.info(`没有获取到热点数据，使用默认热点数据`, 'DataSourceManager');
       const defaultHotspots: SourceHotspot[] = [
         {
           title: '小米发布全新旗舰手机，搭载最新骁龙处理器',

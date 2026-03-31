@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import MainLayout from '@/components/layout/MainLayout';
 import Card from '@/components/ui/Card';
-import Button from '@/components/ui/Button';
+import Button, { IconButton } from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import { api, Hotspot, PaginatedResponse, Notification } from '@/lib/api';
 import { 
@@ -120,7 +120,8 @@ export default function HotspotsPage() {
   };
 
   const defaultSources = ['Twitter', 'Hacker News', 'Reddit', 'RSS', '百度搜索', 'Bing搜索'];
-  const sources = ['all', ...new Set([...defaultSources, ...(data?.data.map(h => h.source) || [])])];
+  const sourceSet = new Set([...defaultSources, ...(data?.data.map(h => h.source) || [])]);
+  const sources = ['all', ...Array.from(sourceSet)];
   
   const filteredHotspots = data?.data.filter(hotspot => {
     const matchesSearch = hotspot.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -252,7 +253,7 @@ export default function HotspotsPage() {
                               </a>
                             )}
                             {unreadNotifications.length > 0 && (
-                              <Button
+                              <IconButton
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => unreadNotifications.forEach(n => handleMarkAsRead(n.id))}

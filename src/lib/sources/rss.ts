@@ -66,6 +66,7 @@ export class RSSDataSource extends BaseDataSource {
 
   constructor(config?: RSSConfig) {
     super(config);
+    this.initConfig(config);
   }
 
   async fetch(keywords?: string[]): Promise<SourceHotspot[]> {
@@ -73,7 +74,7 @@ export class RSSDataSource extends BaseDataSource {
     const feeds = config.feeds || this.defaultConfig.feeds;
     const hotspots: SourceHotspot[] = [];
 
-    if (!keywords || keywords.length === 0) {
+    if (!keywords || keywords.length === 0 || !feeds) {
       return [];
     }
 
@@ -218,13 +219,13 @@ export class RSSDataSource extends BaseDataSource {
     return new Date();
   }
 
-  private isValidContent(hotspot: SourceHotspot): boolean {
-    return hotspot.title.length > 0 && hotspot.content.length > 0;
+  protected isValidContent(hotspot: SourceHotspot): boolean {
+    return hotspot.title.length > 0 && (hotspot.content?.length || 0) > 0;
   }
 
   private matchesKeywords(hotspot: SourceHotspot, keywords: string[]): boolean {
     const titleLower = hotspot.title.toLowerCase();
-    const contentLower = hotspot.content.toLowerCase();
+    const contentLower = hotspot.content?.toLowerCase() || '';
     
     return keywords.some(keyword => {
       const keywordLower = keyword.toLowerCase();
@@ -232,7 +233,7 @@ export class RSSDataSource extends BaseDataSource {
     });
   }
 
-  private calculateHeatScore(data: { views: number; ageHours: number }): number {
+  protected calculateHeatScore(data: { views: number; ageHours: number }): number {
     let score = 30;
     score += Math.min(data.views / 10, 50);
     if (data.ageHours < 24) {

@@ -25,6 +25,11 @@ export abstract class BaseDataSource {
   protected config: SourceConfig;
 
   constructor(config?: SourceConfig) {
+    // 子类必须在构造函数中调用 this.initConfig(config)
+    this.config = {};
+  }
+
+  protected initConfig(config?: SourceConfig) {
     this.config = { ...this.defaultConfig, ...config };
   }
 

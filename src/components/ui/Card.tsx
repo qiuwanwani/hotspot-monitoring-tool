@@ -8,6 +8,7 @@ interface CardProps {
   hover?: boolean;
   glow?: boolean;
   onClick?: () => void;
+  style?: React.CSSProperties;
 }
 
 export default function Card({ 
@@ -15,11 +16,13 @@ export default function Card({
   className = '', 
   hover = false, 
   glow = false,
-  onClick 
+  onClick,
+  style
 }: CardProps) {
   return (
     <div 
       onClick={onClick}
+      style={style}
       className={`
         relative rounded-xl bg-card border border-border
         ${hover ? 'hover:bg-card-hover hover:border-border-light cursor-pointer transition-all duration-300 hover:-translate-y-0.5 hover:shadow-card-hover' : ''}
