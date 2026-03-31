@@ -2,6 +2,14 @@
 
 自动发现和监控热点信息，第一时间推送通知的智能工具。
 
+## 界面预览
+
+### 仪表盘首页
+![仪表盘首页](./docs/screenshots/首页.png)
+
+### 暗黑模式
+![暗黑模式](./docs/screenshots/首页暗黑模式.png)
+
 ## 功能特性
 
 ### 核心功能
@@ -73,6 +81,10 @@ npm run dev
 
 ```
 hotspot-monitoring-tool/
+├── docs/                   # 文档和截图
+│   ├── screenshots/        # 界面截图
+│   ├── DESIGN.md          # 设计文档
+│   └── REQUIREMENTS.md    # 需求文档
 ├── prisma/                 # 数据库模型
 │   └── schema.prisma
 ├── src/
@@ -80,10 +92,14 @@ hotspot-monitoring-tool/
 │   │   ├── api/           # API 路由
 │   │   │   ├── keywords/  # 关键词管理
 │   │   │   ├── hotspots/  # 热点管理
+│   │   │   ├── notifications/ # 通知管理
+│   │   │   ├── settings/  # 系统设置
 │   │   │   └── monitor/   # 监控服务
 │   │   ├── dashboard/     # 仪表盘页面
 │   │   ├── hotspots/      # 热点列表页面
 │   │   ├── keywords/      # 关键词管理页面
+│   │   ├── notifications/ # 通知页面
+│   │   ├── settings/      # 设置页面
 │   │   └── layout.tsx     # 主布局
 │   ├── components/        # React 组件
 │   │   ├── layout/        # 布局组件
@@ -100,9 +116,7 @@ hotspot-monitoring-tool/
 │   │   │   └── web-scraper.ts # 网页抓取
 │   │   └── api.ts         # API 客户端
 │   └── types/             # TypeScript 类型
-├── design-system/         # 设计系统文档
 ├── .env.example           # 环境变量示例
-├── clear-data.js          # 数据清空脚本
 └── package.json
 ```
 
@@ -124,6 +138,15 @@ hotspot-monitoring-tool/
 ### 监控服务
 - `POST /api/monitor/fetch` - 立即执行数据获取
 
+### 通知管理
+- `GET /api/notifications` - 获取通知列表
+- `PUT /api/notifications/:id/read` - 标记通知为已读
+- `PUT /api/notifications/read-all` - 标记所有通知为已读
+
+### 系统设置
+- `GET /api/settings` - 获取系统设置
+- `POST /api/settings` - 更新系统设置
+
 ## 设计系统
 
 项目采用 **Dark Mode + Glassmorphism** 设计风格，详见 [design-system/MASTER.md](./design-system/MASTER.md)。
@@ -142,6 +165,11 @@ hotspot-monitoring-tool/
 
 ## 开发计划
 
+- [x] 仪表盘首页 - 实时状态监控和数据统计
+- [x] 通知系统 - 邮件和推送通知
+- [x] 系统设置 - 通知、AI、邮件配置
+- [x] 暗黑模式 - 深色主题支持
+- [x] 骨架屏 - 加载状态优化
 - [ ] 用户认证系统
 - [ ] 更多数据源支持 (微博、知乎等)
 - [ ] 高级筛选和搜索
