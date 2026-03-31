@@ -1,4 +1,4 @@
-const API_BASE = 'http://localhost:3002/api';
+const API_BASE = '/api';
 
 export interface Keyword {
   id: string;
@@ -83,20 +83,31 @@ class ApiClient {
     endpoint: string,
     options?: RequestInit
   ): Promise<T> {
-    const response = await fetch(`${API_BASE}${endpoint}`, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...options?.headers,
-      },
-      ...options,
-    });
+    try {
+      console.log('API请求开始:', `${API_BASE}${endpoint}`);
+      const response = await fetch(`${API_BASE}${endpoint}`, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...options?.headers,
+        },
+        ...options,
+      });
 
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: '请求失败' }));
-      throw new Error(error.error || '请求失败');
+      console.log('API请求响应:', response.status, response.statusText);
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: '请求失败' }));
+        console.error('API请求错误:', error);
+        throw new Error(error.error || '请求失败');
+      }
+
+      const data = await response.json();
+      console.log('API请求成功:', data);
+      return data;
+    } catch (error) {
+      console.error('API请求异常:', error);
+      throw error;
     }
-
-    return response.json();
   }
 
   async getKeywords(): Promise<Keyword[]> {

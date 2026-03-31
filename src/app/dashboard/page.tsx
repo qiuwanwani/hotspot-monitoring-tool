@@ -73,14 +73,19 @@ export default function DashboardPage() {
     try {
       setLoading(true);
       setError(null);
+      console.log('开始获取数据...');
       const [keywordsData, hotspotsData] = await Promise.all([
         api.getKeywords(),
         api.getHotspots({ limit: 5 })
       ]);
+      console.log('获取数据成功:', { keywordsCount: keywordsData.length, hotspotsCount: hotspotsData.data.length });
       setKeywords(keywordsData);
       setHotspots(hotspotsData.data);
     } catch (error) {
       console.error('获取数据失败:', error);
+      console.error('错误类型:', typeof error);
+      console.error('错误信息:', error instanceof Error ? error.message : error);
+      console.error('错误堆栈:', error instanceof Error ? error.stack : null);
       setError('获取数据失败，请稍后重试');
     } finally {
       setLoading(false);
