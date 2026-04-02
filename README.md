@@ -24,6 +24,14 @@
 - **RSS 源** - 可自定义添加RSS订阅
 - **Web Scraper** - 通用网页抓取
 
+## 界面预览
+
+### 仪表盘首页（浅色模式）
+![仪表盘首页](./docs/screenshots/首页.png)
+
+### 仪表盘首页（深色模式）
+![暗黑模式](./docs/screenshots/首页暗黑模式.png)
+
 ## 技术栈
 
 - **前端**: Next.js 14 + React + TypeScript + Tailwind CSS
